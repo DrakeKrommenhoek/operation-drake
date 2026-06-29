@@ -2,6 +2,7 @@
 Mock CLI dry-run. Exercises the full pipeline without paid credentials.
 Run from the project root: python scripts/dry_run.py
 """
+
 import os
 import shutil
 import sys
