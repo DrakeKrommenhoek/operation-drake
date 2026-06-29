@@ -2,11 +2,14 @@
 
 Reply policy
 ------------
-All text sent to Telegram uses plain text (no parse_mode) so that
-LLM-generated content, user text, proposed actions, and summaries never
-trigger Telegram's Markdown entity parser. The _safe_text helper strips
-the small set of Markdown v1 control characters as a final safety net,
-but the primary rule is: never pass model output through parse_mode.
+All text sent to Telegram uses plain text (no parse_mode). Without parse_mode,
+Telegram treats every character literally: underscores, asterisks, backticks,
+brackets, URLs, and filenames are safe and must be preserved unchanged.
+
+_safe_text() is the send boundary — it ensures the text is a str and
+performs no character stripping. _reply() handles message splitting for
+Telegram's 4,096-character limit, sending multiple plain-text messages when
+needed.
 """
 
 import asyncio
@@ -28,24 +31,58 @@ logger = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Text safety
+# Text safety and message splitting
 # ---------------------------------------------------------------------------
 
-_MARKDOWN_V1_SPECIAL = str.maketrans({c: "" for c in r"*_`[]"})
+TELEGRAM_MAX_LEN = 4096
 
 
 def _safe_text(text: str) -> str:
-    """Strip Telegram Markdown v1 control characters.
+    """Return text unchanged for plain-text Telegram sending.
 
-    Used as a final safety net before sending any string whose content is not
-    fully controlled by the application (LLM output, user text, summaries).
+    No parse_mode is used, so Markdown characters (* _ ` [ ] and others)
+    are rendered literally by Telegram. Stripping them would corrupt content
+    such as filenames, URLs, intent names, and user-supplied text.
+
+    This function exists as the explicit send boundary so callers signal that
+    content safety has been considered. It makes no character modifications.
     """
-    return text.translate(_MARKDOWN_V1_SPECIAL)
+    return text
+
+
+def _split_message(text: str, max_len: int = TELEGRAM_MAX_LEN) -> list[str]:
+    """Split text into chunks that each fit within max_len characters.
+
+    Prefers splitting at the last newline within the window, then the last
+    space. Falls back to a hard cut only when no whitespace exists in the
+    window. The split delimiter is consumed and does not appear at the start
+    of the next chunk.
+    """
+    if len(text) <= max_len:
+        return [text]
+
+    chunks: list[str] = []
+    while len(text) > max_len:
+        window = text[:max_len]
+        cut = window.rfind("\n")
+        if cut <= 0:
+            cut = window.rfind(" ")
+        if cut <= 0:
+            # No whitespace in window — hard cut with no delimiter to consume
+            chunks.append(text[:max_len])
+            text = text[max_len:]
+        else:
+            chunks.append(text[:cut])
+            text = text[cut + 1 :]  # consume the newline or space
+    if text:
+        chunks.append(text)
+    return chunks
 
 
 async def _reply(update: Update, text: str) -> None:
-    """Send a plain-text reply, stripping Markdown control characters."""
-    await update.message.reply_text(_safe_text(text))
+    """Send a plain-text reply, splitting across multiple messages if needed."""
+    for chunk in _split_message(_safe_text(text)):
+        await update.message.reply_text(chunk)
 
 
 # ---------------------------------------------------------------------------
