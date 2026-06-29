@@ -2,57 +2,61 @@
 
 ## Completed — Session 1 (2026-06-28)
 
-- [x] Project scaffold: pyproject.toml, .gitignore, .env.example, directory tree
-- [x] Config (pydantic-settings) and structured JSON logging
-- [x] Pydantic schemas: InboundMessage, Attachment, IntentDecision, Task, Artifact, AgentRun
-- [x] SQLAlchemy ORM models (all tables)
-- [x] Storage layer: repositories for all entities, validated task transitions
-- [x] LLM provider abstraction: base interface, mock, Anthropic, OpenAI
-- [x] Transcription provider abstraction: base interface, mock, OpenAI Whisper
-- [x] Ingestion: normalizer, URL detector
-- [x] Content adapters: webpage, YouTube (blocked, URL preserved), audio
-- [x] Project registry (JSON) and keyword classifier
-- [x] Router agent with prompt template and JSON response parsing
-- [x] Capture agent, Synthesis agent
-- [x] Workflows: capture_note, summarize, extract_actions, create_research_brief, process_voice_note
-- [x] Artifact service, Approval service
-- [x] Orchestration service (full pipeline wiring)
-- [x] CLI channel adapter (run_once + interactive)
-- [x] Telegram channel adapter (text, voice)
-- [x] FastAPI app: /health, /tasks, /tasks/{id}
-- [x] Prompt templates: router.md, capture.md, synthesis.md
+- [x] Project scaffold, schemas, ORM models, repositories
+- [x] LLM and transcription provider abstractions (mock, Anthropic, OpenAI)
+- [x] Ingestion, content adapters, project registry, keyword classifier
+- [x] Router, Capture, Synthesis agents with prompt templates
+- [x] Five workflows: capture_note, summarize, extract_actions, research_brief, process_voice_note
+- [x] Orchestration service (full pipeline)
+- [x] CLI and Telegram channel adapters
+- [x] FastAPI app with /health and /tasks endpoints
 - [x] Dockerfile, docker-compose.yml, Makefile
-- [x] 41 tests (33 unit + 8 integration), all passing
-- [x] Ruff lint clean, Docker Compose validates
+- [x] 41 tests, ruff clean, Docker Compose validates
 
 ## Completed — Session 2 (2026-06-28)
 
-- [x] Rename package: `personal_agent_os` → `operation_drake` (all files, imports, docs, config)
-- [x] ruff format applied to all 26 files needing it
-- [x] `TELEGRAM_ALLOWED_USER_IDS` — config, `.env.example`, auth guard in all Telegram handlers
-- [x] Approval loop: `execute_approved_task`, `reject_task`, `correct_task` on orchestrator
-- [x] Telegram commands: `/approve`, `/reject`, `/correct`, `/task`, `/inbox`, `/projects`, `/status`
-- [x] CLI adapter: `approve()`, `reject()`, `correct()` methods
+- [x] Rename package `personal_agent_os` → `operation_drake`
+- [x] ruff format applied to all files
+- [x] `TELEGRAM_ALLOWED_USER_IDS` auth guard
+- [x] Full approval loop: `execute_approved_task`, `reject_task`, `correct_task`
+- [x] Telegram commands: `/approve`, `/reject`, `/correct`, `/task`, `/inbox`, `/projects`
 - [x] `python -m operation_drake.main --check` diagnostic command
-- [x] Dead code removed: `agents/registry.py`, `ingestion/attachment_handler.py`
-- [x] FastAPI `on_event` deprecation fixed with lifespan
-- [x] pytest-asyncio loop scope warning silenced
-- [x] `scripts/dry_run.py` — complete 10-step mock pipeline validation
-- [x] 56 tests pass (33 unit + 23 integration), zero warnings
-- [x] Ruff check clean, format clean, Docker Compose validates, --check passes
+- [x] Dead code removed (agent registry, attachment handler)
+- [x] FastAPI `on_event` deprecation fixed
+- [x] 56 tests, ruff clean
 
-## Next Milestone (Session 3)
+## Completed — Session 3 (2026-06-29)
 
-**Objective: First live end-to-end test with real credentials.**
+- [x] Root cause fixed: `_safe_text()` preserves all content (no character stripping)
+- [x] `_split_message()` for Telegram's 4,096-character limit
+- [x] Error handler registered on Telegram Application
+- [x] `.env` duplicate key bug fixed (mock was overriding openai)
+- [x] Provider factories raise `ValueError` on unknown names (no silent mock fallback)
+- [x] `init_db()` auto-creates database directory
+- [x] `docker-compose.yml`: port 8000 bound to `127.0.0.1` only
+- [x] `Dockerfile`: non-root `drake` user (UID 1000)
+- [x] 37 Telegram safety regression tests added
+- [x] 95 tests total, ruff clean
+- [x] VPS inspected: Ubuntu 24.04, Docker 29.6.1 installed, swap added
+- [x] `drake` user added to `docker` group
+- [x] Application directories created at `/opt/operation-drake/data/`
+- [x] Repository cloned to `/opt/operation-drake/` at commit `75c21f8`
+- [x] Production `.env` created with `600` permissions
+- [x] All production secrets configured (not displayed or committed)
+- [x] `DEFAULT_LLM_PROVIDER=openai`, `DEFAULT_TRANSCRIPTION_PROVIDER=openai_whisper` confirmed
 
-- [ ] Set `TELEGRAM_BOT_TOKEN` in `.env`
-- [ ] Set `TELEGRAM_ALLOWED_USER_IDS` to your Telegram user ID
-- [ ] Set `ANTHROPIC_API_KEY` and `DEFAULT_LLM_PROVIDER=anthropic` in `.env`
-- [ ] Run `python -m operation_drake.main --check` — verify all green
-- [ ] Run `python -m operation_drake.main --channel telegram`
-- [ ] Send a text message — verify intent classification uses real Claude
-- [ ] Send a voice note — verify Whisper transcription (if `OPENAI_WHISPER_API_KEY` set)
-- [ ] Send a URL — verify extraction and capture
-- [ ] Test `/approve`, `/reject`, `/correct` commands live
-- [ ] Verify artifact files created correctly
-- [ ] Deploy to VPS via Docker Compose (see docs/vps-deployment.md)
+## Pending — Session 4 (Deployment)
+
+- [ ] Build Docker image on VPS
+- [ ] Start containers with `docker compose up -d`
+- [ ] Verify health endpoint responds at `http://localhost:8000/health`
+- [ ] Run `--check` inside container, confirm `openai` and not `mock`
+- [ ] Confirm Telegram polling starts in logs
+- [ ] Confirm SQLite database created in `/opt/operation-drake/data/database/`
+- [ ] Test container restart: data and artifacts persist
+- [ ] Live Telegram message validation (6 messages + voice note)
+- [ ] Unauthorized-user test
+- [ ] Validate and run `scripts/backup.sh`, `scripts/smoke_test.sh`, `scripts/deploy.sh`
+- [ ] Update `docs/vps-deployment.md` with exact operational commands
+- [ ] Confirm no secret values in logs
+- [ ] Commit and push any documentation updates
