@@ -1,0 +1,17 @@
+.env
+*.pyc
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+data/database/*.db
+data/inbox/*
+data/artifacts/*
+!data/inbox/.gitkeep
+!data/artifacts/.gitkeep
+!data/database/.gitkeep
+.venv/
+venv/
+*.log

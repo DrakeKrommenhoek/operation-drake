@@ -1,0 +1,47 @@
+[
+  {
+    "id": "answer-movement",
+    "name": "The Answer Movement",
+    "description": "Fitness and wellness platform. Daily workouts, journaling, streaks, accountability.",
+    "aliases": ["answer", "fitness", "wellness", "workout", "the answer", "exercise", "gym"],
+    "status": "active",
+    "capabilities": ["capture", "synthesis"],
+    "storage_path": "data/artifacts/answer-movement"
+  },
+  {
+    "id": "ascend",
+    "name": "Ascend",
+    "description": "Strategic OS for high-achieving college students. School, recruiting, calendars, Canvas, deadlines.",
+    "aliases": ["ascend", "school", "recruiting", "canvas", "college", "class", "deadline", "internship"],
+    "status": "active",
+    "capabilities": ["capture", "synthesis", "research"],
+    "storage_path": "data/artifacts/ascend"
+  },
+  {
+    "id": "pe-prep",
+    "name": "PE Prep",
+    "description": "Mountaingate Capital readiness — LBO modeling, deal sourcing, memos, industry research.",
+    "aliases": ["pe", "private equity", "mountaingate", "lbo", "deal", "investment", "portfolio", "memo"],
+    "status": "active",
+    "capabilities": ["research", "synthesis"],
+    "storage_path": "data/artifacts/pe-prep"
+  },
+  {
+    "id": "personal-health",
+    "name": "DK Personal Health OS",
+    "description": "Personal health tracking — fitness, nutrition, sleep, recovery.",
+    "aliases": ["health", "sleep", "nutrition", "recovery", "body", "food", "diet"],
+    "status": "active",
+    "capabilities": ["capture"],
+    "storage_path": "data/artifacts/personal-health"
+  },
+  {
+    "id": "personal",
+    "name": "Personal",
+    "description": "General personal notes, ideas, and life systems.",
+    "aliases": ["personal", "life", "idea", "note", "journal", "reflection", "thought"],
+    "status": "active",
+    "capabilities": ["capture", "synthesis"],
+    "storage_path": "data/artifacts/personal"
+  }
+]
