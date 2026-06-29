@@ -1,8 +1,11 @@
-# Operation Drake — CLAUDE.md
+# Operation D.R.A.K.E. — CLAUDE.md
+
+> Project: Operation D.R.A.K.E. (Digital Router for Actions, Knowledge, and Execution)
+> Repository: `operation-drake` | Python package: `operation_drake` | Service name: `drake`
 
 ## Purpose
 
-Operation Drake is a personal AI agent OS. It receives messages through channel adapters (Telegram, CLI), normalizes them, classifies intent, executes safe workflows, and returns results. It is not a demo — it is a long-term, deliberately-built system.
+Operation D.R.A.K.E. is a personal AI agent OS. It receives messages through channel adapters (Telegram, CLI), normalizes them, classifies intent, executes safe workflows, and returns results. It is not a demo — it is a long-term, deliberately-built system.
 
 ## Architectural Principles
 
@@ -26,16 +29,18 @@ Operation Drake is a personal AI agent OS. It receives messages through channel 
 ## Development Commands
 
 ```bash
-make install       # pip install -e ".[dev]"
-make test          # pytest tests/ -v
-make lint          # ruff check src/ tests/
-make fmt           # ruff format src/ tests/
-make check         # lint + test
-make run           # uvicorn API mode
-make cli           # interactive CLI mode
-make telegram      # Telegram polling mode
-make docker-build  # docker compose build
-make docker-up     # docker compose up -d
+make install                              # pip install -e ".[dev]"
+make test                                 # pytest tests/ -v
+make lint                                 # ruff check src/ tests/
+make fmt                                  # ruff format src/ tests/
+make check                                # lint + test
+make run                                  # uvicorn API mode on :8000
+make cli                                  # interactive CLI mode
+make telegram                             # Telegram polling mode
+make docker-build                         # docker compose build
+make docker-up                            # docker compose up -d
+python -m operation_drake.main --check    # system diagnostic
+python scripts/dry_run.py                 # full pipeline dry-run (no credentials needed)
 ```
 
 ## Data Handling Rules

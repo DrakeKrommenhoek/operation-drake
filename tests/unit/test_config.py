@@ -1,4 +1,4 @@
-from personal_agent_os.config import get_settings
+from operation_drake.config import get_settings
 
 
 def test_settings_has_required_fields():

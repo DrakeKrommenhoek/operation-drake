@@ -1,22 +1,27 @@
 import os
 import tempfile
 
-from personal_agent_os.agents.capture import CaptureAgent
-from personal_agent_os.agents.synthesis import SynthesisAgent
-from personal_agent_os.llm.mock_provider import MockLLMProvider
-from personal_agent_os.services.approval import requires_approval
-from personal_agent_os.services.artifact_service import ArtifactService
-from personal_agent_os.transcription.mock_transcriber import MockTranscriber
-from personal_agent_os.workflows.capture_note import CaptureNoteWorkflow
-from personal_agent_os.workflows.extract_actions import ExtractActionsWorkflow
-from personal_agent_os.workflows.process_voice_note import ProcessVoiceNoteWorkflow
-from personal_agent_os.workflows.summarize import SummarizeWorkflow
+from operation_drake.agents.capture import CaptureAgent
+from operation_drake.agents.synthesis import SynthesisAgent
+from operation_drake.llm.mock_provider import MockLLMProvider
+from operation_drake.services.approval import requires_approval
+from operation_drake.services.artifact_service import ArtifactService
+from operation_drake.transcription.mock_transcriber import MockTranscriber
+from operation_drake.workflows.capture_note import CaptureNoteWorkflow
+from operation_drake.workflows.extract_actions import ExtractActionsWorkflow
+from operation_drake.workflows.process_voice_note import ProcessVoiceNoteWorkflow
+from operation_drake.workflows.summarize import SummarizeWorkflow
 
 
 def test_artifact_service_creates_file():
     with tempfile.TemporaryDirectory() as tmpdir:
         svc = ArtifactService(artifacts_dir=tmpdir)
-        path = svc.save(title="Test Note", content="# Test\nHello world", task_id="task-abc123", artifact_type="note")
+        path = svc.save(
+            title="Test Note",
+            content="# Test\nHello world",
+            task_id="task-abc123",
+            artifact_type="note",
+        )
         assert os.path.exists(path)
         content = open(path, encoding="utf-8").read()
         assert "# Test" in content
@@ -38,7 +43,10 @@ def test_summarize_workflow():
         agent = SynthesisAgent(llm=MockLLMProvider())
         svc = ArtifactService(artifacts_dir=tmpdir)
         wf = SummarizeWorkflow(synthesis_agent=agent, artifact_service=svc)
-        result = wf.run(content="Python is a versatile programming language used in many fields.", task_id="task-002")
+        result = wf.run(
+            content="Python is a versatile programming language used in many fields.",
+            task_id="task-002",
+        )
         assert result.success
         assert result.artifact_path
 
@@ -57,7 +65,9 @@ def test_voice_note_workflow():
         agent = SynthesisAgent(llm=MockLLMProvider())
         svc = ArtifactService(artifacts_dir=tmpdir)
         transcriber = MockTranscriber()
-        wf = ProcessVoiceNoteWorkflow(transcriber=transcriber, synthesis_agent=agent, artifact_service=svc)
+        wf = ProcessVoiceNoteWorkflow(
+            transcriber=transcriber, synthesis_agent=agent, artifact_service=svc
+        )
         result = wf.run(audio_path="/fake/voice.ogg", task_id="task-004")
         assert result.success
         assert "transcribed" in result.summary.lower()

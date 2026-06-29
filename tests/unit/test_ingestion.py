@@ -1,5 +1,5 @@
-from personal_agent_os.ingestion.normalizer import normalize_message
-from personal_agent_os.ingestion.url_detector import detect_urls
+from operation_drake.ingestion.normalizer import normalize_message
+from operation_drake.ingestion.url_detector import detect_urls
 
 
 def test_normalize_strips_whitespace():

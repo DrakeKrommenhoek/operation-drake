@@ -1,4 +1,4 @@
-from personal_agent_os.services.project_classifier import classify_project, get_registry
+from operation_drake.services.project_classifier import classify_project, get_registry
 
 
 def test_load_registry_returns_list():

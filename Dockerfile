@@ -17,4 +17,4 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-CMD ["python", "-m", "personal_agent_os.main"]
+CMD ["python", "-m", "operation_drake.main"]

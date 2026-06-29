@@ -1,4 +1,4 @@
-from personal_agent_os.models.schemas import (
+from operation_drake.models.schemas import (
     VALID_TRANSITIONS,
     InboundMessageCreate,
     IntentType,

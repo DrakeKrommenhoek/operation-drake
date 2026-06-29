@@ -1,8 +1,8 @@
-from personal_agent_os.agents.capture import CaptureAgent
-from personal_agent_os.agents.router import RouterAgent
-from personal_agent_os.agents.synthesis import SynthesisAgent
-from personal_agent_os.ingestion.normalizer import normalize_message
-from personal_agent_os.llm.mock_provider import MockLLMProvider
+from operation_drake.agents.capture import CaptureAgent
+from operation_drake.agents.router import RouterAgent
+from operation_drake.agents.synthesis import SynthesisAgent
+from operation_drake.ingestion.normalizer import normalize_message
+from operation_drake.llm.mock_provider import MockLLMProvider
 
 
 def test_router_returns_intent_decision():
@@ -33,7 +33,9 @@ def test_capture_agent_runs():
 
 def test_synthesis_agent_summarizes():
     agent = SynthesisAgent(llm=MockLLMProvider())
-    result = agent.run_synthesis("Long article text about Python performance goes here.", task_type="summarize")
+    result = agent.run_synthesis(
+        "Long article text about Python performance goes here.", task_type="summarize"
+    )
     assert result.title
     assert isinstance(result.key_points, list)
     assert isinstance(result.action_items, list)

@@ -15,13 +15,13 @@ fmt:
 check: lint test
 
 run:
-	python -m personal_agent_os.main
+	python -m operation_drake.main
 
 cli:
-	python -m personal_agent_os.main --channel cli
+	python -m operation_drake.main --channel cli
 
 telegram:
-	python -m personal_agent_os.main --channel telegram
+	python -m operation_drake.main --channel telegram
 
 docker-build:
 	docker compose build

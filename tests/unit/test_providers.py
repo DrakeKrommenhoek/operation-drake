@@ -1,5 +1,5 @@
-from personal_agent_os.llm.mock_provider import MockLLMProvider
-from personal_agent_os.transcription.mock_transcriber import MockTranscriber
+from operation_drake.llm.mock_provider import MockLLMProvider
+from operation_drake.transcription.mock_transcriber import MockTranscriber
 
 
 def test_mock_llm_returns_content():
