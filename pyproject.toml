@@ -18,7 +18,7 @@ dependencies = [
     "openai>=1.35",
     "python-dotenv>=1.0",
     "aiofiles>=23.0",
-    "notion-client>=2.2",
+    "notion-client>=2.2,<3.0",
 ]
 
 [project.optional-dependencies]

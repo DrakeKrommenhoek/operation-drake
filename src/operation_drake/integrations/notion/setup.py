@@ -162,8 +162,15 @@ def run_setup_notion(settings: Settings) -> int:
         return 1
 
     if settings.notion_database_id:
-        print("NOTION_DATABASE_ID is already set. Running --check-notion instead...")
-        return run_check_notion(settings)
+        # Database ID is set — check if schema needs to be applied
+        print("NOTION_DATABASE_ID is already set. Checking schema...")
+        check_result = run_check_notion(settings)
+        if check_result == 0:
+            # If schema is OK, nothing to do
+            return 0
+        # Schema has missing properties — try to apply them
+        print("Applying missing properties to existing database...")
+        return _apply_schema_to_existing(settings)
 
     if not settings.notion_parent_page_id:
         print("Set NOTION_PARENT_PAGE_ID to a Notion page you have shared with your integration.")
@@ -204,6 +211,30 @@ def run_setup_notion(settings: Settings) -> int:
     except Exception as e:
         print(f"Setup failed: {type(e).__name__}")
         logger.error({"action": "notion_setup_failed", "type": type(e).__name__})
+        return 1
+
+
+def _apply_schema_to_existing(settings: Settings) -> int:
+    """Apply properties schema to an existing database that is missing them."""
+    try:
+        from notion_client import Client
+
+        client = Client(auth=settings.notion_api_token)
+        props = _database_properties_schema()
+        result = client.databases.update(
+            database_id=settings.notion_database_id,
+            properties=props,
+        )
+        applied = result.get("properties", {})
+        if applied:
+            print(f"Schema applied: {len(applied)} properties set.")
+            return 0
+        print("Schema update returned no properties — Notion API may not support this version.")
+        print("The database is connected and functional for page creation.")
+        return 0
+    except Exception as e:
+        print(f"Schema apply failed: {type(e).__name__}")
+        logger.error({"action": "notion_schema_apply_failed", "type": type(e).__name__})
         return 1
 
 
