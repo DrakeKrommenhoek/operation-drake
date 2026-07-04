@@ -190,6 +190,9 @@ class TelegramAdapter(ChannelAdapter):
         self._app.add_handler(CommandHandler("inbox", self._cmd_inbox))
         self._app.add_handler(CommandHandler("projects", self._cmd_projects))
         self._app.add_handler(CommandHandler("cost", self._cmd_cost))
+        self._app.add_handler(CommandHandler("notion", self._cmd_notion))
+        self._app.add_handler(CommandHandler("sync", self._cmd_sync))
+        self._app.add_handler(CommandHandler("sync_pending", self._cmd_sync_pending))
         self._app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
         self._app.add_handler(MessageHandler(filters.VOICE, self._handle_voice))
         self._app.add_error_handler(self._error_handler)
@@ -242,7 +245,10 @@ class TelegramAdapter(ChannelAdapter):
             "/approve <id> -- approve and execute a pending task\n"
             "/reject <id> -- reject a pending task\n"
             "/correct <id> <new instruction> -- re-interpret a pending task\n"
-            "/projects -- list known projects\n\n"
+            "/projects -- list known projects\n"
+            "/notion -- Notion sync status\n"
+            "/sync <task_id> -- retry Notion sync for a task\n"
+            "/sync_pending -- retry all pending Notion syncs\n\n"
             "Or just send any message, voice note, or link.",
         )
 
@@ -340,6 +346,31 @@ class TelegramAdapter(ChannelAdapter):
             f"Model: gpt-4o-mini (blended rate)",
         ]
         await _reply(update, "\n".join(lines))
+
+    async def _cmd_notion(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_allowed(str(update.effective_user.id)):
+            return
+        loop = asyncio.get_event_loop()
+        reply = await loop.run_in_executor(None, self._do_notion_status)
+        await _reply(update, reply)
+
+    async def _cmd_sync(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_allowed(str(update.effective_user.id)):
+            return
+        if not context.args:
+            await _reply(update, "Usage: /sync <task_id>")
+            return
+        task_id = context.args[0]
+        loop = asyncio.get_event_loop()
+        reply = await loop.run_in_executor(None, self._do_sync_task, task_id)
+        await _reply(update, reply)
+
+    async def _cmd_sync_pending(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_allowed(str(update.effective_user.id)):
+            return
+        loop = asyncio.get_event_loop()
+        reply = await loop.run_in_executor(None, self._do_sync_pending)
+        await _reply(update, reply)
 
     # -----------------------------------------------------------------------
     # Message handlers
@@ -488,6 +519,80 @@ class TelegramAdapter(ChannelAdapter):
             lines.append(f"[{t.id[:8]}] {t.task_type} -- {t.requested_action[:60]}")
             lines.append(f"  /approve {t.id} | /reject {t.id}")
         return "\n".join(lines)
+
+    def _do_notion_status(self) -> str:
+        from operation_drake.integrations.notion import get_notion_client
+        from operation_drake.integrations.notion.sync_service import NotionSyncService
+
+        s = self._settings
+        lines = ["Notion status:"]
+        lines.append(f"Enabled: {'yes' if s.notion_enabled else 'no'}")
+        if not s.notion_enabled:
+            return "\n".join(lines)
+        lines.append(f"Database configured: {'yes' if s.notion_database_id else 'no'}")
+        client = get_notion_client(s)
+        svc = NotionSyncService(
+            session=get_session(),
+            client=client,
+            database_id=s.notion_database_id,
+            low_confidence_threshold=s.notion_low_confidence_threshold,
+        )
+        status = svc.get_status()
+        lines.append(f"Pending syncs: {status['pending']}")
+        lines.append(f"Failed syncs: {status['failed']}")
+        if status["last_synced_at"]:
+            lines.append(f"Last synced: {status['last_synced_at']}")
+        return "\n".join(lines)
+
+    def _do_sync_task(self, task_id: str) -> str:
+        from operation_drake.integrations.notion import get_notion_client
+        from operation_drake.integrations.notion.sync_service import NotionSyncService
+
+        s = self._settings
+        if not s.notion_enabled:
+            return "Notion is not enabled. Set NOTION_ENABLED=true in .env."
+        client = get_notion_client(s)
+        svc = NotionSyncService(
+            session=get_session(),
+            client=client,
+            database_id=s.notion_database_id,
+            low_confidence_threshold=s.notion_low_confidence_threshold,
+        )
+        result = svc.sync_by_task_id(task_id)
+        if result.status == "not_found":
+            return f"No sync record found for task {task_id[:8]}."
+        if result.status in ("synced", "updated"):
+            lines = [f"Synced task {task_id[:8]}."]
+            if result.page_url:
+                lines.append(result.page_url)
+            return "\n".join(lines)
+        if result.status == "already_synced":
+            lines = [f"Task {task_id[:8]} was already synced."]
+            if result.page_url:
+                lines.append(result.page_url)
+            return "\n".join(lines)
+        return f"Sync failed for task {task_id[:8]}. Category: {result.error_category or 'unknown'}"
+
+    def _do_sync_pending(self) -> str:
+        from operation_drake.integrations.notion import get_notion_client
+        from operation_drake.integrations.notion.sync_service import NotionSyncService
+
+        s = self._settings
+        if not s.notion_enabled:
+            return "Notion is not enabled. Set NOTION_ENABLED=true in .env."
+        client = get_notion_client(s)
+        svc = NotionSyncService(
+            session=get_session(),
+            client=client,
+            database_id=s.notion_database_id,
+            low_confidence_threshold=s.notion_low_confidence_threshold,
+        )
+        results = svc.sync_pending(limit=20)
+        if not results:
+            return "No pending syncs."
+        synced = sum(1 for r in results if r.status in ("synced", "updated"))
+        failed = sum(1 for r in results if r.status == "failed")
+        return f"Processed {len(results)} pending sync(s): {synced} synced, {failed} failed."
 
     def run(self) -> None:
         logger.info({"action": "telegram_polling_start"})
