@@ -23,6 +23,8 @@ services:
       - .env
     volumes:
       - ./data:/app/data
+    healthcheck:
+      disable: true
     depends_on:
       api:
         condition: service_healthy
