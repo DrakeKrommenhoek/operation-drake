@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
     && useradd --uid 1000 --create-home --shell /bin/bash drake
 
 COPY pyproject.toml .
+COPY src/ src/
 RUN pip install --no-cache-dir -e .
 
 COPY . .
