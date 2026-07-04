@@ -44,11 +44,17 @@
 ## Phase 5: External Tools and Actions
 
 **Exit criteria:**
-- [ ] Notion / Google Docs output (approval required)
+- [x] Notion one-way sync (auto, no approval) — D.R.A.K.E. Knowledge Vault
 - [ ] Google Calendar event creation (approval required)
 - [ ] Email composition and send (approval required)
 - [ ] Web search tool integrated into research workflows
 - [ ] All external actions logged with full audit trail
+
+### Notion Roadmap Items
+
+- [ ] ChatGPT / CarPlay voice import: connect conversation exports to D.R.A.K.E. normalization → Notion (source=ChatGPT Voice, capture_context=Pre-work Drive / Post-work Drive)
+- [ ] Bidirectional status sync: when Status changed in Notion → mark task accordingly in D.R.A.K.E.
+- [ ] Duplicate detection: flag near-identical entries in same project before creating new page
 
 ## Phase 6: More Messaging Channels
 

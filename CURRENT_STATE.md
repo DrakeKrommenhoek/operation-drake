@@ -1,6 +1,6 @@
 # CURRENT_STATE.md
 
-Last updated: 2026-07-04 (Session 4 — first production workflow complete)
+Last updated: 2026-07-04 (Session 5 — Notion integration complete, pending live connection)
 
 ## Verified Facts
 
@@ -20,11 +20,12 @@ Last updated: 2026-07-04 (Session 4 — first production workflow complete)
 - Local and remote are in sync
 
 ### Local Application Status
-- **95 tests pass**, zero failures, zero warnings
+- **193 tests pass**, zero failures, zero warnings (98 new Notion-specific tests)
 - `ruff check`: all checks passed
 - `ruff format --check`: all files formatted
 - `docker compose config`: validates cleanly
 - `python -m operation_drake.main --check`: all checks passed (openai, openai_whisper)
+- `python -m operation_drake.main --check-notion`: passes (Notion disabled by default)
 
 ### VPS Status (DigitalOcean, Ubuntu 24.04 LTS)
 
@@ -111,12 +112,37 @@ First backup created: `backups/backup_20260704_172108.tar.gz`
 - Approval messages now include running session spend before asking for confirmation
 - Model selection options: added to roadmap for a future session
 
+## Session 5 Changes
+
+### Notion Integration
+- `src/operation_drake/integrations/notion/` package created:
+  - `errors.py`, `models.py`, `client.py`, `mock_client.py`, `live_client.py`
+  - `classifier.py` (LLM-based classification), `mapper.py`, `body_builder.py`
+  - `sync_service.py` (idempotency, retry, outbox), `setup.py` (CLI commands)
+- `NotionSyncORM` table added to database (safe additive migration via `create_all`)
+- `NotionSyncRepository` with full CRUD and status tracking
+- `notion-client>=2.2` added to dependencies
+- Six new `.env` settings: `NOTION_ENABLED`, `NOTION_API_TOKEN`, `NOTION_PARENT_PAGE_ID`, `NOTION_DATABASE_ID`, `NOTION_SYNC_MODE`, `NOTION_LOW_CONFIDENCE_THRESHOLD`
+- `ProcessResult` extended with Notion sync fields
+- Telegram format shows Project / Type / Notion: synced after workflow completion
+- Telegram commands: `/notion`, `/sync <task_id>`, `/sync_pending`
+- CLI: `--check-notion`, `--setup-notion`
+- `docs/notion-setup.md` created
+- `prompts/notion_classifier.md` created
+
+### Notion Status
+- `NOTION_ENABLED=false` (default) — no behavior change to production bot
+- Integration is ready to connect: follow `docs/notion-setup.md` to enable
+- Production deployment with Notion requires: backup → set .env → deploy → `--check-notion` → live test
+
 ## Next Session
 
 Resume with:
 
 ```
-Resume Operation D.R.A.K.E. Session 5.
-First complete any remaining live Telegram tests (voice note, /status, /projects, /inbox, /cost).
+Resume Operation D.R.A.K.E. Session 6.
+First: connect Notion integration on the VPS (follow docs/notion-setup.md).
+Run --check-notion inside the container to verify.
+Then complete live Telegram tests: voice note, /status, /projects, /inbox, /cost, /notion.
 Then build the second workflow: article/URL/video capture.
 ```

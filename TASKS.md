@@ -67,11 +67,31 @@
 - [x] Approval messages include running session spend before confirmation
 - [x] Auth guard verified: all 12 handler entry points check `_is_allowed`
 
-## Pending — Session 5
+## Completed — Session 5 (2026-07-04)
 
+- [x] Notion integration: D.R.A.K.E. Knowledge Vault database schema (16 properties)
+- [x] `NotionClassifier`: LLM-based classification → project, content_type, capture_context, confidence, sync_to_notion
+- [x] `NotionPropertyMapper`: classification → Notion API property dict with chunking
+- [x] `NotionBodyBuilder`: structured page body (Summary, Action Items, Metadata)
+- [x] `NotionSyncService`: idempotency (notion:<task_id> key), retry, outbox tracking
+- [x] `NotionSyncORM` / `NotionSyncRepository`: persistent sync state in SQLite
+- [x] `LiveNotionClient`: real Notion API via `notion-client>=2.2`
+- [x] `MockNotionClient`: configurable test double (auth/timeout/rate_limit failures)
+- [x] Explicit override detection: "save under X", "do not sync", content type overrides
+- [x] Low-confidence → Needs Review + Telegram note
+- [x] Notion failure never changes task status, never loses local data
+- [x] `ProcessResult` extended with notion_sync_status, notion_page_url, notion_project, notion_content_type, notion_needs_review
+- [x] Telegram format extended with Project/Type/Notion synced summary
+- [x] Telegram commands: `/notion`, `/sync <task_id>`, `/sync_pending`
+- [x] CLI: `--check-notion`, `--setup-notion` (creates DB from parent page, idempotent)
+- [x] `NOTION_ENABLED=false` default — zero behavior change to existing workflows
+- [x] `docs/notion-setup.md`: complete Notion setup guide
+- [x] 193 tests pass (98 new Notion-specific tests), ruff clean
+
+## Pending — Session 6
+
+- [ ] Live Notion test: connect integration on production, verify end-to-end sync
 - [ ] Live voice note test (send short voice note, verify transcription + routing)
-- [ ] Test `/status`, `/projects`, `/inbox`, `/cost` commands
-- [ ] Verify token counts appear in `/cost` after real API calls
+- [ ] Test `/notion`, `/sync_pending` commands on production
 - [ ] Build second workflow: article/URL/video capture (extract from external content)
 - [ ] Model selection: add ability to choose between gpt-4o-mini and gpt-4o per intent
-- [ ] Update `docs/vps-deployment.md` with complete operational reference
