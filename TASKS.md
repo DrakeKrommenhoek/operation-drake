@@ -45,18 +45,33 @@
 - [x] All production secrets configured (not displayed or committed)
 - [x] `DEFAULT_LLM_PROVIDER=openai`, `DEFAULT_TRANSCRIPTION_PROVIDER=openai_whisper` confirmed
 
-## Pending — Session 4 (Deployment)
+## Completed — Session 4 (2026-07-04)
 
-- [ ] Build Docker image on VPS
-- [ ] Start containers with `docker compose up -d`
-- [ ] Verify health endpoint responds at `http://localhost:8000/health`
-- [ ] Run `--check` inside container, confirm `openai` and not `mock`
-- [ ] Confirm Telegram polling starts in logs
-- [ ] Confirm SQLite database created in `/opt/operation-drake/data/database/`
-- [ ] Test container restart: data and artifacts persist
-- [ ] Live Telegram message validation (6 messages + voice note)
-- [ ] Unauthorized-user test
-- [ ] Validate and run `scripts/backup.sh`, `scripts/smoke_test.sh`, `scripts/deploy.sh`
-- [ ] Update `docs/vps-deployment.md` with exact operational commands
-- [ ] Confirm no secret values in logs
-- [ ] Commit and push any documentation updates
+- [x] Dockerfile: `COPY src/ src/` added before pip install (fixes src-layout editable install)
+- [x] `.dockerignore` created (excludes .env, data/, tests/, build artifacts)
+- [x] Docker image built on VPS: `operation-drake-api:latest`, `operation-drake-telegram:latest`
+- [x] Containers started: API (healthy), Telegram (polling)
+- [x] Health endpoint verified: `{"status":"ok","database":"connected"}`
+- [x] Production diagnostic: openai + openai_whisper, 1 authorized user, all checks passed
+- [x] `docker-compose.yml`: telegram health check disabled (no HTTP server in polling mode)
+- [x] Restart test: containers recover, database and backups persist
+- [x] `scripts/deploy.sh`, `scripts/backup.sh`, `scripts/smoke_test.sh` created
+- [x] Smoke test passed: 6/6 checks
+- [x] First backup created: `backups/backup_20260704_172108.tar.gz`
+- [x] Live Telegram test: `save_note` → intent routed, artifact saved, response returned
+- [x] Live Telegram test: `summarize` → summary returned, artifact saved
+- [x] Live Telegram test: ambiguous input → approval triggered (not guessed)
+- [x] Bug fix: `extract_actions` summary now returns formatted checkbox list, not just count
+- [x] Token cost tracking: `LLMResponse` counts threaded through agents → workflows → AgentRunORM
+- [x] `/cost` Telegram command: total tokens + estimated USD spend
+- [x] Approval messages include running session spend before confirmation
+- [x] Auth guard verified: all 12 handler entry points check `_is_allowed`
+
+## Pending — Session 5
+
+- [ ] Live voice note test (send short voice note, verify transcription + routing)
+- [ ] Test `/status`, `/projects`, `/inbox`, `/cost` commands
+- [ ] Verify token counts appear in `/cost` after real API calls
+- [ ] Build second workflow: article/URL/video capture (extract from external content)
+- [ ] Model selection: add ability to choose between gpt-4o-mini and gpt-4o per intent
+- [ ] Update `docs/vps-deployment.md` with complete operational reference

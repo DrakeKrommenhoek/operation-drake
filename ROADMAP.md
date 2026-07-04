@@ -69,8 +69,10 @@
 ## Phase 8: Monitoring, Evaluation, and Continuous Improvement
 
 **Exit criteria:**
+- [x] Token cost tracked per agent run and reported via /cost
 - [ ] LLM intent accuracy tracked over time
-- [ ] Cost per message tracked and reported
+- [ ] Cost per message broken down by input/output tokens (separate fields)
+- [ ] Model selection per intent: choose gpt-4o vs gpt-4o-mini based on task complexity
 - [ ] Agent run latency monitored
 - [ ] Ability to correct past intent decisions and feed back into routing
 - [ ] Regression test suite from real message history

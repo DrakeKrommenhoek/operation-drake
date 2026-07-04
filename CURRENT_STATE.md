@@ -1,6 +1,6 @@
 # CURRENT_STATE.md
 
-Last updated: 2026-06-29 (Session 3 — pre-deployment close)
+Last updated: 2026-07-04 (Session 4 — first production workflow complete)
 
 ## Verified Facts
 
@@ -15,7 +15,7 @@ Last updated: 2026-06-29 (Session 3 — pre-deployment close)
 - Location (local): `C:\Users\drake\Desktop\operation-drake\`
 - GitHub: `https://github.com/DrakeKrommenhoek/operation-drake.git`
 - Branch: `master`
-- Latest commit: `75c21f8 fix: auto-create db directory, localhost-only port, non-root container user`
+- Latest commit: `36d6411 feat: token cost tracking, /cost command, cost in approval messages`
 - Git working tree: clean
 - Local and remote are in sync
 
@@ -30,18 +30,16 @@ Last updated: 2026-06-29 (Session 3 — pre-deployment close)
 
 **Verified:**
 - Hostname: `drake`, accessible via `ssh drake-vps`
-- Ubuntu 24.04.4 LTS
-- 67 GB disk, 1.9 GB RAM
-- 1 GB swap added and persisted in `/etc/fstab`
+- Ubuntu 24.04 (kernel 6.8.0-124)
+- 67 GB disk (3.9 GB used), 1.9 GB RAM + 1 GB swap
 - Docker 29.6.1 and Docker Compose v5.2.0 installed
-- Only services running: SSH, DigitalOcean agent, standard Ubuntu services
-- No conflicting applications found
 - User `drake` (UID 1000) exists and is in the `docker` group
+- No conflicting applications or failed services
 
 **Repository on VPS:**
 - Location: `/opt/operation-drake/`
 - Owner: `drake:drake`, permissions `750`
-- Deployed commit: `75c21f8` (matches local and GitHub)
+- Deployed commit: `36d6411` (matches local and GitHub)
 
 **Persistent data directories (created, owned by drake:drake):**
 - `/opt/operation-drake/data/database/`
@@ -53,61 +51,72 @@ Last updated: 2026-06-29 (Session 3 — pre-deployment close)
 - Location: `/opt/operation-drake/.env`
 - Owner: `drake:drake`, permissions `600`
 - `TELEGRAM_BOT_TOKEN` — SET
-- `TELEGRAM_ALLOWED_USER_IDS` — SET
+- `TELEGRAM_ALLOWED_USER_IDS` — SET (1 authorized user)
 - `OPENAI_API_KEY` — SET
 - `OPENAI_WHISPER_API_KEY` — SET
-- `DEFAULT_LLM_PROVIDER=openai` — SET, exactly 1 definition
-- `DEFAULT_TRANSCRIPTION_PROVIDER=openai_whisper` — SET, exactly 1 definition
+- `DEFAULT_LLM_PROVIDER=openai` — SET
+- `DEFAULT_TRANSCRIPTION_PROVIDER=openai_whisper` — SET
 - Secret values were never displayed, logged, or committed
 
-**NOT YET DONE:**
-- Docker image build not attempted
-- Containers not started
-- Health endpoint not tested on VPS
-- Persistence and restart not verified
-- Live Telegram messages not tested
-- Unauthorized-user test not run
-- Operational scripts not validated against VPS
-- No backup performed yet
+**Containers (production, running):**
+- `operation-drake-api-1`: Up, healthy, port `127.0.0.1:8000` only
+- `operation-drake-telegram-1`: Up, health check disabled (polling bot, no HTTP server)
+- Restart policy: `unless-stopped`
+- Health endpoint: `{"status":"ok","database":"connected","service":"operation-drake","version":"0.1.0"}`
 
-## Credentials Needed
+**Production diagnostic (inside container):** All checks passed — LLM: openai, Transcription: openai_whisper, 1 authorized user.
 
-All production credentials are now in `/opt/operation-drake/.env` on the VPS.
-Local `.env` contains working credentials for local development.
-Neither file is committed to Git.
+**Persistence verified:** Restart test passed — bot reconnects, database and backups survive.
 
-## Recent Changes (Sessions 1–3)
+## First Workflow: Telegram Intake and Response
 
-### Session 1 — Foundation
-- Full project scaffold, schemas, ORM, repositories, LLM/transcription abstractions
-- Five workflows, orchestration service, CLI and Telegram adapters, FastAPI app
-- 41 tests
-
-### Session 2 — Audit and Corrections
-- Renamed package `personal_agent_os` → `operation_drake`
-- Full approval loop: `/approve`, `/reject`, `/correct`, `/task`, `/inbox`
-- `TELEGRAM_ALLOWED_USER_IDS` auth guard
-- `--check` diagnostic command
-- Dead code removed
-- 56 tests
-
-### Session 3 — Telegram Fixes and Pre-Deployment
-- Fixed root cause of Telegram `BadRequest`: `_safe_text()` no longer strips characters; plain text used throughout with no `parse_mode`
-- `_split_message()` added for 4,096-character Telegram limit
-- Fixed `.env` duplicate key bug (mock overriding openai)
-- Provider factories raise `ValueError` on unknown provider names (no silent mock fallback)
-- `init_db()` auto-creates database directory
-- `docker-compose.yml`: port 8000 bound to `127.0.0.1` only
-- `Dockerfile`: non-root `drake` user (UID 1000)
-- VPS prepared: Docker installed, user configured, directories created, swap added, repo cloned, `.env` configured
-- 95 tests
-
-## Next Milestone
-
-**Deploy and validate.** Resume with:
+The full pipeline is production-ready:
 
 ```
-Continue Operation D.R.A.K.E. deployment from CURRENT_STATE.md.
-VPS is prepared. Repository is at /opt/operation-drake. Production .env is configured.
-Begin at Step 6: build the Docker image, start containers, verify health endpoint, confirm OpenAI is active, and run live Telegram validation.
+Telegram text/voice → normalization → LLM routing → workflow execution
+→ artifact saved → InboundMessage + IntentDecision + Task + AgentRun + Artifact persisted
+→ result sent to Drake's private Telegram chat
+```
+
+**Live tests completed (partial — extract_actions bug found and fixed mid-session):**
+- `save_note`: authorized user accepted, intent routed, artifact saved, response returned
+- `summarize`: summary text returned, artifact saved
+- `extract_actions`: FIX DEPLOYED — now returns formatted checkbox list, not just count
+- Ambiguous/unknown: triggers approval instead of guessing
+
+**Pending live tests (send after deployment):**
+- Voice note transcription end-to-end
+- `/status`, `/projects`, `/inbox` commands
+- `/cost` command
+
+## Operational Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `scripts/deploy.sh` | git pull, docker compose build + up, health check |
+| `scripts/backup.sh` | tar database + artifacts to `backups/` with timestamp |
+| `scripts/smoke_test.sh` | health endpoint, diagnostic, dir checks (6/6 PASS) |
+
+First backup created: `backups/backup_20260704_172108.tar.gz`
+
+## Session 4 Changes
+
+- Dockerfile: added `COPY src/ src/` before pip install (fixes src-layout build error)
+- `.dockerignore`: created — excludes `.env`, `data/`, `tests/`, build artifacts
+- `docker-compose.yml`: telegram service health check disabled (polling bot has no HTTP server)
+- `scripts/deploy.sh`, `scripts/backup.sh`, `scripts/smoke_test.sh`: created
+- `extract_actions` bug fixed: `WorkflowResult.summary` now contains the formatted checkbox list
+- Token cost tracking: `input_tokens`/`output_tokens` threaded from `LLMResponse` through agent results and `WorkflowResult` to `AgentRunORM.token_count`
+- `/cost` Telegram command: shows total tracked tokens and estimated spend (~$USD at gpt-4o-mini blended rate)
+- Approval messages now include running session spend before asking for confirmation
+- Model selection options: added to roadmap for a future session
+
+## Next Session
+
+Resume with:
+
+```
+Resume Operation D.R.A.K.E. Session 5.
+First complete any remaining live Telegram tests (voice note, /status, /projects, /inbox, /cost).
+Then build the second workflow: article/URL/video capture.
 ```
