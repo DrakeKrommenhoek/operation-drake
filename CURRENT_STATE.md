@@ -1,6 +1,6 @@
 # CURRENT_STATE.md
 
-Last updated: 2026-07-04 (Session 5 — Notion integration complete, pending live connection)
+Last updated: 2026-07-04 (Session 6 — Notion integration live and verified in production)
 
 ## Verified Facts
 
@@ -15,7 +15,7 @@ Last updated: 2026-07-04 (Session 5 — Notion integration complete, pending liv
 - Location (local): `C:\Users\drake\Desktop\operation-drake\`
 - GitHub: `https://github.com/DrakeKrommenhoek/operation-drake.git`
 - Branch: `master`
-- Latest commit: `36d6411 feat: token cost tracking, /cost command, cost in approval messages`
+- Latest commit: `4bb49b3 fix: use raw httpx with Notion-Version 2022-06-28 in live_client`
 - Git working tree: clean
 - Local and remote are in sync
 
@@ -40,7 +40,7 @@ Last updated: 2026-07-04 (Session 5 — Notion integration complete, pending liv
 **Repository on VPS:**
 - Location: `/opt/operation-drake/`
 - Owner: `drake:drake`, permissions `750`
-- Deployed commit: `36d6411` (matches local and GitHub)
+- Deployed commit: `4bb49b3` (matches local and GitHub)
 
 **Persistent data directories (created, owned by drake:drake):**
 - `/opt/operation-drake/data/database/`
@@ -57,6 +57,12 @@ Last updated: 2026-07-04 (Session 5 — Notion integration complete, pending liv
 - `OPENAI_WHISPER_API_KEY` — SET
 - `DEFAULT_LLM_PROVIDER=openai` — SET
 - `DEFAULT_TRANSCRIPTION_PROVIDER=openai_whisper` — SET
+- `NOTION_ENABLED=true` — SET
+- `NOTION_API_TOKEN` — SET (never displayed or committed)
+- `NOTION_PARENT_PAGE_ID` — SET (never displayed or committed)
+- `NOTION_DATABASE_ID` — SET (D.R.A.K.E. Knowledge Vault)
+- `NOTION_SYNC_MODE=automatic` — SET
+- `NOTION_LOW_CONFIDENCE_THRESHOLD=0.70` — SET
 - Secret values were never displayed, logged, or committed
 
 **Containers (production, running):**
@@ -135,14 +141,51 @@ First backup created: `backups/backup_20260704_172108.tar.gz`
 - Integration is ready to connect: follow `docs/notion-setup.md` to enable
 - Production deployment with Notion requires: backup → set .env → deploy → `--check-notion` → live test
 
+## Session 6 Changes
+
+### Notion API Compatibility Fixes
+- Notion API version `2025-09-03` (used by notion-client 3.x) broke `databases.create` schema and `databases.retrieve properties`
+- `live_client.py`: rewritten to use raw `httpx` with pinned `Notion-Version: 2022-06-28` header — removes SDK version dependency entirely
+- `pyproject.toml`: pinned `notion-client>=2.2,<3.0`
+- `setup.py`: added `_apply_schema_to_existing()` using raw httpx for schema repair; `--setup-notion` auto-repairs missing properties on existing databases; `run_check_notion` returns exit code 2 for repairable schema warnings
+
+### Notion Production Setup (Completed)
+- D.R.A.K.E. Knowledge Vault created in Notion: 16 properties verified
+- `NOTION_ENABLED=true` in production `.env`
+- `--check-notion`: Schema compatible, Connection OK
+- `--setup-notion`: Self-repairing — finds existing DB and applies missing schema
+
+### Automated Pipeline Verification (All passed)
+- S1: Business idea → Business Ideas / Idea ✓
+- S2: Personal reflection → Personal Life / Reflection ✓
+- S3: Answer Movement idea → The Answer Movement / Idea ✓
+- S4: Ascend idea → Ascend / Action Plan ✓
+- S5: Pre-work drive text → Career & Work / Workday Check-in / Capture Context: Pre-work Drive ✓
+- S6: Post-work drive text → Career & Work / Reflection ✓
+- Override test: "Save under Answer Movement" → The Answer Movement ✓
+- Do-not-sync test: "Do not save to Notion" → sync skipped, local completed ✓
+- Low confidence: → General / Needs Review / review=True ✓
+- Auth failure test: local task completed even when Notion auth fails ✓
+- Retry test: failed sync retried and succeeded ✓
+- Task-level idempotency: second sync of same task → already_synced, 0 duplicate pages ✓
+- `sync_pending`: 0 pending, 0 failed ✓
+
+### Remaining Live Telegram Tests (need manual send)
+- Send each of the 6 scenarios via Telegram to verify bot response format
+- Send voice notes (S5 and S6) to verify Whisper transcription + Notion sync
+- Run `/notion`, `/sync_pending`, `/status`, `/projects`, `/inbox`, `/cost` in Telegram
+
+### Backups
+- Pre-session: `backup_20260704_185516.tar.gz` (5.7K)
+- Post-session: `backup_20260704_202520.tar.gz` (20K, includes test artifacts)
+
 ## Next Session
 
 Resume with:
 
 ```
-Resume Operation D.R.A.K.E. Session 6.
-First: connect Notion integration on the VPS (follow docs/notion-setup.md).
-Run --check-notion inside the container to verify.
-Then complete live Telegram tests: voice note, /status, /projects, /inbox, /cost, /notion.
-Then build the second workflow: article/URL/video capture.
+Resume Operation D.R.A.K.E. Session 7.
+Notion is live in production. Start by sending the 6 live Telegram test scenarios
+and verifying Notion pages. Then build the social-media / URL capture workflow
+per docs/superpowers/specs/2026-07-04-social-media-capture-design.md.
 ```

@@ -88,10 +88,27 @@
 - [x] `docs/notion-setup.md`: complete Notion setup guide
 - [x] 193 tests pass (98 new Notion-specific tests), ruff clean
 
-## Pending — Session 6
+## Completed — Session 6 (2026-07-04)
 
-- [ ] Live Notion test: connect integration on production, verify end-to-end sync
-- [ ] Live voice note test (send short voice note, verify transcription + routing)
-- [ ] Test `/notion`, `/sync_pending` commands on production
-- [ ] Build second workflow: article/URL/video capture (extract from external content)
-- [ ] Model selection: add ability to choose between gpt-4o-mini and gpt-4o per intent
+- [x] Notion API v2025-09-03 compatibility: rewrite live_client.py with raw httpx + Notion-Version: 2022-06-28
+- [x] Pin notion-client>=2.2,<3.0
+- [x] --setup-notion: auto-repair missing properties on existing databases
+- [x] D.R.A.K.E. Knowledge Vault created and connected in production
+- [x] All 16 properties verified: types correct, schema compatible
+- [x] Automated pipeline: all 6 scenarios (business idea, reflection, Answer Movement, Ascend, pre-work drive, post-work drive)
+- [x] Override test: explicit project instruction honored ✓
+- [x] Do-not-sync test: sync skipped, local completed ✓
+- [x] Low confidence: Needs Review + review flag ✓
+- [x] Failure test: local task completes even when Notion auth fails ✓
+- [x] Retry: failed sync retried successfully ✓
+- [x] Task-level idempotency: already_synced on second attempt, 0 duplicate pages ✓
+- [x] Production backup: backup_20260704_202520.tar.gz (20K)
+- [x] CURRENT_STATE.md updated with live Notion status
+
+## Pending — Session 7
+
+- [ ] Send 6 live Telegram scenarios and verify Notion pages manually
+- [ ] Send voice notes for S5 (pre-work) and S6 (post-work) to verify Whisper + Notion sync
+- [ ] Run `/notion`, `/sync_pending`, `/status`, `/projects`, `/inbox`, `/cost` via Telegram
+- [ ] Build social-media / URL capture workflow (see docs/superpowers/specs/2026-07-04-social-media-capture-design.md)
+- [ ] Model selection: choose between gpt-4o-mini and gpt-4o per intent
