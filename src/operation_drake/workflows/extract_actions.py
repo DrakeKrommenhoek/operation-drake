@@ -30,7 +30,7 @@ class ExtractActionsWorkflow:
             return WorkflowResult(
                 success=True,
                 artifact_path=path,
-                summary=f"{len(result.action_items)} action items extracted",
+                summary=actions,
             )
         except Exception as e:
             return WorkflowResult(success=False, error=str(e))

@@ -58,6 +58,9 @@ def test_extract_actions_workflow():
         wf = ExtractActionsWorkflow(synthesis_agent=agent, artifact_service=svc)
         result = wf.run(content="TODO: review the PR, update docs, write tests", task_id="task-003")
         assert result.success
+        assert result.artifact_path
+        # summary must contain the formatted action list, not just a count string
+        assert "- [ ]" in result.summary or "No action items found" in result.summary
 
 
 def test_voice_note_workflow():
