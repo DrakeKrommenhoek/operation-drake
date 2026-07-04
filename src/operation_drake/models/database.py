@@ -91,6 +91,24 @@ class ArtifactORM(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class NotionSyncORM(Base):
+    __tablename__ = "notion_syncs"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uid)
+    idempotency_key: Mapped[str] = mapped_column(String, unique=True, nullable=False)
+    task_id: Mapped[str] = mapped_column(String, nullable=False)
+    artifact_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    destination: Mapped[str] = mapped_column(String, default="notion")
+    external_page_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    sync_status: Mapped[str] = mapped_column(String, default="pending")
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    last_error_category: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+
 class AgentRunORM(Base):
     __tablename__ = "agent_runs"
     id: Mapped[str] = mapped_column(String, primary_key=True, default=_uid)

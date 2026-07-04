@@ -10,6 +10,7 @@ from operation_drake.models.database import (
     ArtifactORM,
     InboundMessageORM,
     IntentDecisionORM,
+    NotionSyncORM,
     TaskORM,
 )
 from operation_drake.models.schemas import (
@@ -18,6 +19,7 @@ from operation_drake.models.schemas import (
     ArtifactCreate,
     InboundMessageCreate,
     IntentDecisionCreate,
+    NotionSyncCreate,
     TaskCreate,
     TaskStatus,
 )
@@ -198,3 +200,83 @@ class AgentRunRepository:
 
         result = self.session.query(func.sum(AgentRunORM.token_count)).scalar()
         return result or 0
+
+
+class NotionSyncRepository:
+    def __init__(self, session: Session):
+        self.session = session
+
+    def create(self, data: NotionSyncCreate) -> NotionSyncORM:
+        obj = NotionSyncORM(id=_uid(), **data.model_dump())
+        self.session.add(obj)
+        self.session.commit()
+        self.session.refresh(obj)
+        return obj
+
+    def get_by_idempotency_key(self, key: str) -> NotionSyncORM | None:
+        return (
+            self.session.query(NotionSyncORM)
+            .filter(NotionSyncORM.idempotency_key == key)
+            .first()
+        )
+
+    def get_by_task_id(self, task_id: str) -> NotionSyncORM | None:
+        return (
+            self.session.query(NotionSyncORM)
+            .filter(NotionSyncORM.task_id == task_id)
+            .first()
+        )
+
+    def record_attempt(self, sync_id: str) -> None:
+        obj = self.session.get(NotionSyncORM, sync_id)
+        if obj:
+            obj.attempt_count += 1
+            obj.last_attempt_at = _now()
+            self.session.commit()
+
+    def mark_synced(self, sync_id: str, page_id: str) -> None:
+        obj = self.session.get(NotionSyncORM, sync_id)
+        if obj:
+            obj.sync_status = "synced"
+            obj.external_page_id = page_id
+            obj.last_error_category = None
+            self.session.commit()
+
+    def mark_failed(self, sync_id: str, error_category: str) -> None:
+        obj = self.session.get(NotionSyncORM, sync_id)
+        if obj:
+            obj.sync_status = "failed"
+            obj.last_error_category = error_category
+            self.session.commit()
+
+    def list_pending(self, limit: int = 50) -> list[NotionSyncORM]:
+        return (
+            self.session.query(NotionSyncORM)
+            .filter(NotionSyncORM.sync_status.in_(["pending", "failed"]))
+            .order_by(NotionSyncORM.created_at.asc())
+            .limit(limit)
+            .all()
+        )
+
+    def count_pending(self) -> int:
+        return (
+            self.session.query(NotionSyncORM)
+            .filter(NotionSyncORM.sync_status == "pending")
+            .count()
+        )
+
+    def count_failed(self) -> int:
+        return (
+            self.session.query(NotionSyncORM)
+            .filter(NotionSyncORM.sync_status == "failed")
+            .count()
+        )
+
+    def get_last_synced_at(self) -> datetime | None:
+        obj = (
+            self.session.query(NotionSyncORM)
+            .filter(NotionSyncORM.sync_status == "synced")
+            .order_by(NotionSyncORM.updated_at.desc())
+            .first()
+        )
+        return obj.updated_at if obj else None

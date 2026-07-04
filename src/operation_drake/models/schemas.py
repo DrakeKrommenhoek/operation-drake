@@ -163,3 +163,22 @@ class AgentRunRead(AgentRunCreate):
     completed_at: datetime | None = None
     status: str = "running"
     model_config = {"from_attributes": True}
+
+
+class NotionSyncCreate(BaseModel):
+    idempotency_key: str
+    task_id: str
+    artifact_id: str | None = None
+    destination: str = "notion"
+    sync_status: str = "pending"
+
+
+class NotionSyncRead(NotionSyncCreate):
+    id: str
+    external_page_id: str | None = None
+    attempt_count: int = 0
+    last_attempt_at: datetime | None = None
+    last_error_category: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    model_config = {"from_attributes": True}

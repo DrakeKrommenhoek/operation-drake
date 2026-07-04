@@ -25,6 +25,12 @@ class Settings(BaseSettings):
     default_transcription_provider: str = "mock"
     approval_required_default: bool = True
     app_env: str = "development"
+    notion_enabled: bool = False
+    notion_api_token: str = ""
+    notion_parent_page_id: str = ""
+    notion_database_id: str = ""
+    notion_sync_mode: str = "automatic"
+    notion_low_confidence_threshold: float = 0.70
 
     def allowed_user_ids(self) -> set[str]:
         """Return the set of allowed Telegram user IDs, or empty set (allow all)."""
