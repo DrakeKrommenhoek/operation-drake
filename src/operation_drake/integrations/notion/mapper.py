@@ -43,9 +43,7 @@ def build_properties(
         "Summary": {"rich_text": _rich_text(classification.summary[:2000])},
         "Actionable": {"checkbox": classification.actionable},
         "Next Action": {"rich_text": _rich_text((classification.next_action or "")[:2000])},
-        "Tags": {
-            "multi_select": [{"name": t[:100]} for t in classification.tags[:10]]
-        },
+        "Tags": {"multi_select": [{"name": t[:100]} for t in classification.tags[:10]]},
         "Confidence": {"number": round(classification.confidence, 4)},
         "D.R.A.K.E. Task ID": {
             "rich_text": [{"type": "text", "text": {"content": classification.task_id[:2000]}}]

@@ -29,10 +29,12 @@ def test_notion_settings_sync_mode_default():
 def test_notion_sync_orm_creates():
     session = _make_session()
     repo = NotionSyncRepository(session)
-    record = repo.create(NotionSyncCreate(
-        idempotency_key="notion:task-1",
-        task_id="task-1",
-    ))
+    record = repo.create(
+        NotionSyncCreate(
+            idempotency_key="notion:task-1",
+            task_id="task-1",
+        )
+    )
     assert record.id
     assert record.sync_status == "pending"
     assert record.attempt_count == 0
@@ -73,7 +75,7 @@ def test_notion_sync_mark_failed():
 def test_notion_sync_count_pending_and_failed():
     session = _make_session()
     repo = NotionSyncRepository(session)
-    r1 = repo.create(NotionSyncCreate(idempotency_key="k1", task_id="t1"))
+    repo.create(NotionSyncCreate(idempotency_key="k1", task_id="t1"))
     r2 = repo.create(NotionSyncCreate(idempotency_key="k2", task_id="t2"))
     repo.mark_failed(r2.id, "auth")
     assert repo.count_pending() == 1
@@ -92,7 +94,7 @@ def test_notion_sync_get_by_task_id():
 def test_notion_sync_list_pending_includes_failed():
     session = _make_session()
     repo = NotionSyncRepository(session)
-    r1 = repo.create(NotionSyncCreate(idempotency_key="k1", task_id="t1"))
+    repo.create(NotionSyncCreate(idempotency_key="k1", task_id="t1"))
     r2 = repo.create(NotionSyncCreate(idempotency_key="k2", task_id="t2"))
     repo.mark_failed(r2.id, "timeout")
     pending = repo.list_pending()

@@ -1,11 +1,11 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from operation_drake.integrations.notion.mapper import build_properties, channel_to_source
 from operation_drake.integrations.notion.models import NotionClassification
 
 
 def _ts() -> datetime:
-    return datetime(2026, 7, 4, 12, 0, 0, tzinfo=timezone.utc)
+    return datetime(2026, 7, 4, 12, 0, 0, tzinfo=UTC)
 
 
 def test_channel_to_source_telegram_text():

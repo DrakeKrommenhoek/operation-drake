@@ -23,9 +23,7 @@ def test_build_body_contains_summary_heading():
     c = NotionClassification(title="T", task_id="t1", summary="This is a summary.")
     blocks = build_body(c)
     heading_blocks = [b for b in blocks if b["type"] == "heading_2"]
-    heading_texts = [
-        b["heading_2"]["rich_text"][0]["text"]["content"] for b in heading_blocks
-    ]
+    heading_texts = [b["heading_2"]["rich_text"][0]["text"]["content"] for b in heading_blocks]
     assert "Summary" in heading_texts
 
 
@@ -34,7 +32,8 @@ def test_build_body_summary_paragraph():
     blocks = build_body(c)
     paragraphs = [
         b["paragraph"]["rich_text"][0]["text"]["content"]
-        for b in blocks if b["type"] == "paragraph"
+        for b in blocks
+        if b["type"] == "paragraph"
     ]
     all_text = " ".join(paragraphs)
     assert "Key insight here" in all_text
@@ -45,7 +44,8 @@ def test_build_body_contains_metadata():
     blocks = build_body(c)
     all_text = " ".join(
         b.get("paragraph", {}).get("rich_text", [{}])[0].get("text", {}).get("content", "")
-        for b in blocks if b["type"] == "paragraph"
+        for b in blocks
+        if b["type"] == "paragraph"
     )
     assert "task-xyz" in all_text
     assert "Ascend" in all_text
@@ -53,7 +53,8 @@ def test_build_body_contains_metadata():
 
 def test_build_body_action_items_use_todo_blocks():
     c = NotionClassification(
-        title="T", task_id="t1",
+        title="T",
+        task_id="t1",
         actionable=True,
         next_action="Call mom\nUpdate docs",
     )
@@ -97,6 +98,7 @@ def test_build_body_no_summary_skips_summary_section():
     blocks = build_body(c)
     heading_texts = [
         b.get(b["type"], {}).get("rich_text", [{}])[0].get("text", {}).get("content", "")
-        for b in blocks if b["type"].startswith("heading_")
+        for b in blocks
+        if b["type"].startswith("heading_")
     ]
     assert "Summary" not in heading_texts

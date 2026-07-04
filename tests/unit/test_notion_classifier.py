@@ -38,7 +38,11 @@ def test_classify_returns_notion_classification():
 
 
 def test_classify_low_confidence_sets_needs_review():
-    clf = _clf(_valid_json(project="General", content_type="General Note", confidence=0.55, notion_status="Inbox"))
+    clf = _clf(
+        _valid_json(
+            project="General", content_type="General Note", confidence=0.55, notion_status="Inbox"
+        )
+    )
     result = clf.classify("some unclear content")
     assert result.notion_status == "Needs Review"
     assert result.project == "General"
@@ -109,24 +113,30 @@ def test_classify_title_capped_at_200():
 
 
 def test_classify_the_answer_movement():
-    clf = _clf(_valid_json(
-        project="The Answer Movement",
-        content_type="Idea",
-        title="Timer breathing exercise for challenge",
-        confidence=0.93,
-    ))
+    clf = _clf(
+        _valid_json(
+            project="The Answer Movement",
+            content_type="Idea",
+            title="Timer breathing exercise for challenge",
+            confidence=0.93,
+        )
+    )
     result = clf.classify("Answer Movement idea: add timer breathing exercise")
     assert result.project == "The Answer Movement"
     assert result.content_type == "Idea"
 
 
 def test_classify_prework_drive_context():
-    clf = _clf(_valid_json(
-        project="Career & Work",
-        content_type="Workday Check-in",
-        capture_context="Pre-work Drive",
-        confidence=0.88,
-    ))
-    result = clf.classify("On the drive to work, I want to focus on finishing the retention analysis")
+    clf = _clf(
+        _valid_json(
+            project="Career & Work",
+            content_type="Workday Check-in",
+            capture_context="Pre-work Drive",
+            confidence=0.88,
+        )
+    )
+    result = clf.classify(
+        "On the drive to work, I want to focus on finishing the retention analysis"
+    )
     assert result.capture_context == "Pre-work Drive"
     assert result.content_type == "Workday Check-in"

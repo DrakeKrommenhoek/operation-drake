@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
@@ -91,6 +91,7 @@ class OrchestratorService:
         self._notion_svc = notion_sync_service
         if notion_sync_service is not None:
             from operation_drake.integrations.notion.classifier import NotionClassifier
+
             self._notion_classifier = NotionClassifier(llm=llm)
         else:
             self._notion_classifier = None
@@ -296,7 +297,9 @@ class OrchestratorService:
                 attachment_path=None,
             )
             self._task_repo.transition(task_id, TaskStatus.completed)
-            self._run_repo.complete(run.id, output_summary=result_summary, token_count=wf_tokens or None)
+            self._run_repo.complete(
+                run.id, output_summary=result_summary, token_count=wf_tokens or None
+            )
             artifact_id: str | None = None
             if artifact_path:
                 artifact_orm = self._artifact_repo.create(

@@ -44,7 +44,9 @@ class NotionSyncService:
         message_type: str = "text",
     ) -> SyncResult:
         if not classification.sync_to_notion:
-            logger.info({"action": "notion_sync_skipped", "task_id": task_id, "reason": "user_opt_out"})
+            logger.info(
+                {"action": "notion_sync_skipped", "task_id": task_id, "reason": "user_opt_out"}
+            )
             return SyncResult(status="skipped")
 
         idempotency_key = f"notion:{task_id}"
@@ -85,7 +87,9 @@ class NotionSyncService:
             if existing_page:
                 page_id, page_url = self._client.update_page(existing_page["id"], properties)
                 self._repo.mark_synced(existing_record.id, page_id)
-                logger.info({"action": "notion_page_updated", "task_id": task_id, "page_id": page_id})
+                logger.info(
+                    {"action": "notion_page_updated", "task_id": task_id, "page_id": page_id}
+                )
                 return SyncResult(
                     status="updated",
                     page_id=page_id,
@@ -95,7 +99,9 @@ class NotionSyncService:
             else:
                 page_id, page_url = self._client.create_page(properties, children)
                 self._repo.mark_synced(existing_record.id, page_id)
-                logger.info({"action": "notion_page_created", "task_id": task_id, "page_id": page_id})
+                logger.info(
+                    {"action": "notion_page_created", "task_id": task_id, "page_id": page_id}
+                )
                 return SyncResult(
                     status="synced",
                     page_id=page_id,
@@ -109,19 +115,27 @@ class NotionSyncService:
             return SyncResult(status="failed", error_category="auth")
         except NotionRateLimitError:
             self._repo.mark_failed(existing_record.id, "rate_limit")
-            logger.warning({"action": "notion_sync_failed", "task_id": task_id, "category": "rate_limit"})
+            logger.warning(
+                {"action": "notion_sync_failed", "task_id": task_id, "category": "rate_limit"}
+            )
             return SyncResult(status="failed", error_category="rate_limit")
         except NotionTimeoutError:
             self._repo.mark_failed(existing_record.id, "timeout")
-            logger.warning({"action": "notion_sync_failed", "task_id": task_id, "category": "timeout"})
+            logger.warning(
+                {"action": "notion_sync_failed", "task_id": task_id, "category": "timeout"}
+            )
             return SyncResult(status="failed", error_category="timeout")
         except NotionAPIError:
             self._repo.mark_failed(existing_record.id, "api_error")
-            logger.error({"action": "notion_sync_failed", "task_id": task_id, "category": "api_error"})
+            logger.error(
+                {"action": "notion_sync_failed", "task_id": task_id, "category": "api_error"}
+            )
             return SyncResult(status="failed", error_category="api_error")
         except Exception:
             self._repo.mark_failed(existing_record.id, "unknown")
-            logger.error({"action": "notion_sync_failed", "task_id": task_id, "category": "unknown"})
+            logger.error(
+                {"action": "notion_sync_failed", "task_id": task_id, "category": "unknown"}
+            )
             return SyncResult(status="failed", error_category="unknown")
 
     def sync_by_task_id(self, task_id: str) -> SyncResult:

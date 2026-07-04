@@ -343,7 +343,7 @@ class TelegramAdapter(ChannelAdapter):
             "Usage",
             f"Total tokens tracked: {total_tokens:,}",
             f"Estimated spend: ~${cost_usd:.4f}",
-            f"Model: gpt-4o-mini (blended rate)",
+            "Model: gpt-4o-mini (blended rate)",
         ]
         await _reply(update, "\n".join(lines))
 

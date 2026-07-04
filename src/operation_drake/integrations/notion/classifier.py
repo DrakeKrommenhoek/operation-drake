@@ -12,21 +12,45 @@ logger = get_logger(__name__)
 _PROMPT_PATH = Path("prompts/notion_classifier.md")
 
 _VALID_PROJECTS = {
-    "General", "Business Ideas", "The Answer Movement", "Ascend",
-    "Operation D.R.A.K.E.", "DK Personal Health OS", "Career & Work",
-    "School & Learning", "Health & Fitness", "Investing & Finance",
-    "Relationships & Networking", "Personal Life",
+    "General",
+    "Business Ideas",
+    "The Answer Movement",
+    "Ascend",
+    "Operation D.R.A.K.E.",
+    "DK Personal Health OS",
+    "Career & Work",
+    "School & Learning",
+    "Health & Fitness",
+    "Investing & Finance",
+    "Relationships & Networking",
+    "Personal Life",
 }
 
 _VALID_CONTENT_TYPES = {
-    "Idea", "Reflection", "Research", "Resource", "Action Plan",
-    "Meeting Note", "Decision", "Journal Entry", "Workday Check-in",
-    "Article or Media Capture", "Voice Memo", "General Note",
+    "Idea",
+    "Reflection",
+    "Research",
+    "Resource",
+    "Action Plan",
+    "Meeting Note",
+    "Decision",
+    "Journal Entry",
+    "Workday Check-in",
+    "Article or Media Capture",
+    "Voice Memo",
+    "General Note",
 }
 
 _VALID_CONTEXTS = {
-    "General", "Pre-work Drive", "Post-work Drive", "Commute",
-    "Work", "School", "Workout", "Evening Reflection", "Weekend Planning",
+    "General",
+    "Pre-work Drive",
+    "Post-work Drive",
+    "Commute",
+    "Work",
+    "School",
+    "Workout",
+    "Evening Reflection",
+    "Weekend Planning",
 }
 
 
@@ -47,8 +71,7 @@ class NotionClassifier(BaseAgent):
     ) -> NotionClassification:
         if self._prompt_template:
             prompt = (
-                self._prompt_template
-                .replace("{content}", content[:2000])
+                self._prompt_template.replace("{content}", content[:2000])
                 .replace("{workflow_summary}", workflow_summary[:1000])
                 .replace("{intent}", intent)
                 .replace("{channel}", channel)

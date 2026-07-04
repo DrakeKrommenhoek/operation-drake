@@ -215,17 +215,11 @@ class NotionSyncRepository:
 
     def get_by_idempotency_key(self, key: str) -> NotionSyncORM | None:
         return (
-            self.session.query(NotionSyncORM)
-            .filter(NotionSyncORM.idempotency_key == key)
-            .first()
+            self.session.query(NotionSyncORM).filter(NotionSyncORM.idempotency_key == key).first()
         )
 
     def get_by_task_id(self, task_id: str) -> NotionSyncORM | None:
-        return (
-            self.session.query(NotionSyncORM)
-            .filter(NotionSyncORM.task_id == task_id)
-            .first()
-        )
+        return self.session.query(NotionSyncORM).filter(NotionSyncORM.task_id == task_id).first()
 
     def record_attempt(self, sync_id: str) -> None:
         obj = self.session.get(NotionSyncORM, sync_id)
@@ -260,16 +254,12 @@ class NotionSyncRepository:
 
     def count_pending(self) -> int:
         return (
-            self.session.query(NotionSyncORM)
-            .filter(NotionSyncORM.sync_status == "pending")
-            .count()
+            self.session.query(NotionSyncORM).filter(NotionSyncORM.sync_status == "pending").count()
         )
 
     def count_failed(self) -> int:
         return (
-            self.session.query(NotionSyncORM)
-            .filter(NotionSyncORM.sync_status == "failed")
-            .count()
+            self.session.query(NotionSyncORM).filter(NotionSyncORM.sync_status == "failed").count()
         )
 
     def get_last_synced_at(self) -> datetime | None:

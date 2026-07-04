@@ -120,10 +120,26 @@ def main() -> None:
     )
     parser.add_argument("--channel", choices=["telegram", "cli", "api"], default="api")
     parser.add_argument("--check", action="store_true", help="Run diagnostic checks and exit")
+    parser.add_argument(
+        "--check-notion", action="store_true", help="Check Notion configuration and exit"
+    )
+    parser.add_argument(
+        "--setup-notion", action="store_true", help="Create Notion database and exit"
+    )
     args = parser.parse_args()
 
     if args.check:
         sys.exit(run_check())
+
+    if args.check_notion:
+        from operation_drake.integrations.notion.setup import run_check_notion
+
+        sys.exit(run_check_notion(get_settings()))
+
+    if args.setup_notion:
+        from operation_drake.integrations.notion.setup import run_setup_notion
+
+        sys.exit(run_setup_notion(get_settings()))
 
     init_db()
 

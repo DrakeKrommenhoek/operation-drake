@@ -17,9 +17,7 @@ def _paragraph(text: str) -> dict:
     return {
         "object": "block",
         "type": "paragraph",
-        "paragraph": {
-            "rich_text": [{"type": "text", "text": {"content": text[:_BLOCK_TEXT_MAX]}}]
-        },
+        "paragraph": {"rich_text": [{"type": "text", "text": {"content": text[:_BLOCK_TEXT_MAX]}}]},
     }
 
 

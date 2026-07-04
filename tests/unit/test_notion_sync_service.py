@@ -1,6 +1,5 @@
 from datetime import UTC, datetime
 
-import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -176,7 +175,9 @@ def test_sync_by_task_id_already_synced():
 def test_sync_voice_message_type():
     client = MockNotionClient()
     svc = _make_svc(client)
-    result = svc.sync("t1", None, _clf(task_id="t1"), _ts(), channel="telegram", message_type="voice")
+    result = svc.sync(
+        "t1", None, _clf(task_id="t1"), _ts(), channel="telegram", message_type="voice"
+    )
     assert result.status == "synced"
     # Check source was set to Telegram Voice in properties
     page_props = client.created_pages[0]["properties"]
