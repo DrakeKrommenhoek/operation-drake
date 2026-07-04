@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import httpx
+
 from operation_drake.integrations.notion.client import NotionClientInterface
 from operation_drake.integrations.notion.errors import (
     NotionAPIError,
@@ -12,76 +14,100 @@ from operation_drake.observability.logging import get_logger
 
 logger = get_logger(__name__)
 
+_API_BASE = "https://api.notion.com/v1"
+# Pin to the stable API version to avoid SDK version mismatches.
+# The Python SDK defaults change with each release; using the stable
+# 2022-06-28 version ensures consistent schema/query behaviour.
+_NOTION_VERSION = "2022-06-28"
+
 
 class LiveNotionClient(NotionClientInterface):
     def __init__(self, api_token: str, database_id: str) -> None:
-        from notion_client import Client
-
-        self._client = Client(auth=api_token)
+        self._token = api_token
         self._database_id = database_id
 
-    def create_page(self, properties: dict, children: list[dict]) -> tuple[str, str]:
+    def _headers(self) -> dict:
+        return {
+            "Authorization": f"Bearer {self._token}",
+            "Notion-Version": _NOTION_VERSION,
+            "Content-Type": "application/json",
+        }
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        json: dict | None = None,
+        timeout: float = 30.0,
+    ) -> dict:
+        url = f"{_API_BASE}/{path.lstrip('/')}"
         try:
-            page = self._client.pages.create(
-                parent={"database_id": self._database_id},
-                properties=properties,
-                children=children,
+            resp = httpx.request(
+                method=method,
+                url=url,
+                headers=self._headers(),
+                json=json,
+                timeout=timeout,
             )
-            page_id = page["id"]
-            page_url = page.get("url", f"https://notion.so/{page_id.replace('-', '')}")
-            return page_id, page_url
-        except Exception as e:
-            raise self._wrap(e) from e
+        except httpx.TimeoutException as exc:
+            raise NotionTimeoutError("Request timed out") from exc
+        except Exception as exc:
+            raise NotionAPIError(f"Network error: {type(exc).__name__}") from exc
+        return self._handle(resp)
+
+    def _handle(self, resp: httpx.Response) -> dict:
+        if resp.status_code == 200:
+            return resp.json()
+        # Log only the status code — never log full response (may contain auth context)
+        logger.warning({"action": "notion_api_error", "status": resp.status_code})
+        if resp.status_code == 401:
+            raise NotionAuthError("Authentication failed")
+        if resp.status_code == 429:
+            raise NotionRateLimitError("Rate limited")
+        if resp.status_code == 404:
+            raise NotionNotFoundError("Resource not found")
+        raise NotionAPIError(f"API error {resp.status_code}")
+
+    # ------------------------------------------------------------------
+
+    def create_page(self, properties: dict, children: list[dict]) -> tuple[str, str]:
+        page = self._request(
+            "POST",
+            "/pages",
+            json={
+                "parent": {"database_id": self._database_id},
+                "properties": properties,
+                "children": children,
+            },
+        )
+        page_id = page["id"]
+        page_url = page.get("url", f"https://notion.so/{page_id.replace('-', '')}")
+        return page_id, page_url
 
     def update_page(self, page_id: str, properties: dict) -> tuple[str, str]:
-        try:
-            page = self._client.pages.update(page_id=page_id, properties=properties)
-            page_url = page.get("url", f"https://notion.so/{page_id.replace('-', '')}")
-            return page_id, page_url
-        except Exception as e:
-            raise self._wrap(e) from e
+        page = self._request(
+            "PATCH",
+            f"/pages/{page_id}",
+            json={"properties": properties},
+        )
+        page_url = page.get("url", f"https://notion.so/{page_id.replace('-', '')}")
+        return page_id, page_url
 
     def find_page_by_task_id(self, task_id: str) -> dict | None:
-        try:
-            result = self._client.databases.query(
-                database_id=self._database_id,
-                filter={
+        result = self._request(
+            "POST",
+            f"/databases/{self._database_id}/query",
+            json={
+                "filter": {
                     "property": "D.R.A.K.E. Task ID",
                     "rich_text": {"equals": task_id},
                 },
-            )
-            results = result.get("results", [])
-            return results[0] if results else None
-        except Exception as e:
-            raise self._wrap(e) from e
+                "page_size": 1,
+            },
+        )
+        results = result.get("results", [])
+        return results[0] if results else None
 
     def get_database_properties(self) -> dict:
-        try:
-            db = self._client.databases.retrieve(database_id=self._database_id)
-            return db.get("properties", {})
-        except Exception as e:
-            raise self._wrap(e) from e
-
-    def _wrap(self, exc: Exception) -> NotionAPIError:
-        try:
-            from notion_client.errors import APIResponseError
-
-            if isinstance(exc, APIResponseError):
-                status = getattr(exc, "status", 0)
-                # Log only the status code — never log full error payload (may contain auth headers)
-                logger.warning({"action": "notion_api_error", "status": status})
-                if status == 401:
-                    return NotionAuthError("Authentication failed")
-                if status == 429:
-                    return NotionRateLimitError("Rate limited")
-                if status == 404:
-                    return NotionNotFoundError("Resource not found")
-                return NotionAPIError(f"API error {status}")
-        except ImportError:
-            pass
-
-        msg = str(exc)
-        if "timeout" in msg.lower() or "timed out" in msg.lower():
-            return NotionTimeoutError("Request timed out")
-        logger.error({"action": "notion_unexpected_error", "type": type(exc).__name__})
-        return NotionAPIError("Unexpected error")
+        db = self._request("GET", f"/databases/{self._database_id}")
+        return db.get("properties", {})

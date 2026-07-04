@@ -134,7 +134,9 @@ def main() -> None:
     if args.check_notion:
         from operation_drake.integrations.notion.setup import run_check_notion
 
-        sys.exit(run_check_notion(get_settings()))
+        result = run_check_notion(get_settings())
+        # 0 = OK, 1 = error, 2 = schema needs repair (informational warning, exit 0)
+        sys.exit(0 if result in (0, 2) else 1)
 
     if args.setup_notion:
         from operation_drake.integrations.notion.setup import run_setup_notion

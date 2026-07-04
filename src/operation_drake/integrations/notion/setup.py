@@ -133,6 +133,7 @@ def run_check_notion(settings: Settings) -> int:
         _print_table(rows, issues)
         return 1
 
+    schema_needs_repair = False
     if db_configured:
         try:
             from operation_drake.integrations.notion.live_client import LiveNotionClient
@@ -142,6 +143,7 @@ def run_check_notion(settings: Settings) -> int:
             missing = [p for p in _REQUIRED_PROPERTIES if p not in props]
             if missing:
                 rows.append(("Schema", f"WARN -- missing: {', '.join(missing[:5])}"))
+                schema_needs_repair = True
             else:
                 rows.append(("Schema", "compatible"))
             rows.append(("Connection", "OK"))
@@ -150,7 +152,7 @@ def run_check_notion(settings: Settings) -> int:
             issues.append("Could not connect to Notion database")
 
     _print_table(rows, issues)
-    return 1 if issues else 0
+    return (2 if schema_needs_repair else 0) if not issues else 1
 
 
 def run_setup_notion(settings: Settings) -> int:
@@ -162,13 +164,16 @@ def run_setup_notion(settings: Settings) -> int:
         return 1
 
     if settings.notion_database_id:
-        # Database ID is set — check if schema needs to be applied
+        # Database ID is set — check schema and repair if needed
         print("NOTION_DATABASE_ID is already set. Checking schema...")
         check_result = run_check_notion(settings)
         if check_result == 0:
-            # If schema is OK, nothing to do
+            print("Schema is already complete.")
             return 0
-        # Schema has missing properties — try to apply them
+        if check_result == 1:
+            print("Connection failed — cannot apply schema.")
+            return 1
+        # check_result == 2: schema is missing properties
         print("Applying missing properties to existing database...")
         return _apply_schema_to_existing(settings)
 
@@ -215,23 +220,29 @@ def run_setup_notion(settings: Settings) -> int:
 
 
 def _apply_schema_to_existing(settings: Settings) -> int:
-    """Apply properties schema to an existing database that is missing them."""
+    """Apply properties schema to an existing database using the stable Notion API version."""
     try:
-        from notion_client import Client
+        import httpx
 
-        client = Client(auth=settings.notion_api_token)
+        headers = {
+            "Authorization": f"Bearer {settings.notion_api_token}",
+            "Notion-Version": "2022-06-28",
+            "Content-Type": "application/json",
+        }
         props = _database_properties_schema()
-        result = client.databases.update(
-            database_id=settings.notion_database_id,
-            properties=props,
+        resp = httpx.patch(
+            f"https://api.notion.com/v1/databases/{settings.notion_database_id}",
+            headers=headers,
+            json={"properties": props},
+            timeout=30,
         )
-        applied = result.get("properties", {})
-        if applied:
+        if resp.status_code == 200:
+            applied = resp.json().get("properties", {})
             print(f"Schema applied: {len(applied)} properties set.")
             return 0
-        print("Schema update returned no properties — Notion API may not support this version.")
-        print("The database is connected and functional for page creation.")
-        return 0
+        print(f"Schema apply failed: HTTP {resp.status_code}")
+        logger.error({"action": "notion_schema_apply_failed", "status": resp.status_code})
+        return 1
     except Exception as e:
         print(f"Schema apply failed: {type(e).__name__}")
         logger.error({"action": "notion_schema_apply_failed", "type": type(e).__name__})
