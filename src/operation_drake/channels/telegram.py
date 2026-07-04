@@ -25,7 +25,11 @@ from operation_drake.llm import get_llm_provider
 from operation_drake.observability.logging import get_logger
 from operation_drake.services.orchestration import OrchestratorService
 from operation_drake.storage.database import get_session
+from operation_drake.storage.repositories import AgentRunRepository
 from operation_drake.transcription import get_transcription_provider
+
+# gpt-4o-mini blended cost rate (75% input at $0.15/1M, 25% output at $0.60/1M)
+_COST_PER_TOKEN = 0.0000002625
 
 logger = get_logger(__name__)
 
@@ -97,6 +101,9 @@ def _format_result(result) -> str:
         f"Status: {result.status}",
     ]
     if result.status == "awaiting_approval":
+        if result.session_tokens:
+            cost = result.session_tokens * _COST_PER_TOKEN
+            lines.append(f"Session spend so far: ~${cost:.4f} ({result.session_tokens:,} tokens)")
         lines.append(f"Requires approval -- task {result.task_id}")
         lines.append(f"Use /approve {result.task_id} to execute")
         lines.append(f"Use /reject {result.task_id} to cancel")
@@ -152,6 +159,7 @@ class TelegramAdapter(ChannelAdapter):
         self._app.add_handler(CommandHandler("task", self._cmd_task))
         self._app.add_handler(CommandHandler("inbox", self._cmd_inbox))
         self._app.add_handler(CommandHandler("projects", self._cmd_projects))
+        self._app.add_handler(CommandHandler("cost", self._cmd_cost))
         self._app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
         self._app.add_handler(MessageHandler(filters.VOICE, self._handle_voice))
         self._app.add_error_handler(self._error_handler)
@@ -287,6 +295,20 @@ class TelegramAdapter(ChannelAdapter):
         for p in projects:
             lines.append(f"{p['id']} ({p['name']})")
             lines.append(f"  {p['description'][:80]}")
+        await _reply(update, "\n".join(lines))
+
+    async def _cmd_cost(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_allowed(str(update.effective_user.id)):
+            return
+        with get_session() as session:
+            total_tokens = AgentRunRepository(session).get_total_tokens()
+        cost_usd = total_tokens * _COST_PER_TOKEN
+        lines = [
+            "Usage",
+            f"Total tokens tracked: {total_tokens:,}",
+            f"Estimated spend: ~${cost_usd:.4f}",
+            f"Model: gpt-4o-mini (blended rate)",
+        ]
         await _reply(update, "\n".join(lines))
 
     # -----------------------------------------------------------------------

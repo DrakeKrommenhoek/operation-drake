@@ -31,6 +31,7 @@ class ExtractActionsWorkflow:
                 success=True,
                 artifact_path=path,
                 summary=actions,
+                token_count=result.input_tokens + result.output_tokens,
             )
         except Exception as e:
             return WorkflowResult(success=False, error=str(e))

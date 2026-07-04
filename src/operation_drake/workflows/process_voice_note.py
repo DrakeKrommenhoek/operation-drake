@@ -26,6 +26,7 @@ class ProcessVoiceNoteWorkflow:
                 artifact_path=result.artifact_path,
                 summary=f"Voice note transcribed and summarized. {result.summary}",
                 error=result.error,
+                token_count=result.token_count,
             )
         except Exception as e:
             return WorkflowResult(success=False, error=str(e))

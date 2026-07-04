@@ -15,6 +15,8 @@ class SynthesisResult:
     action_items: list[str] = field(default_factory=list)
     questions: list[str] = field(default_factory=list)
     next_steps: list[str] = field(default_factory=list)
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 class SynthesisAgent(BaseAgent):
@@ -38,4 +40,6 @@ class SynthesisAgent(BaseAgent):
             action_items=data.get("action_items", []),
             questions=data.get("questions", []),
             next_steps=data.get("next_steps", []),
+            input_tokens=resp.input_tokens,
+            output_tokens=resp.output_tokens,
         )

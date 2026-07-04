@@ -186,3 +186,15 @@ class AgentRunRepository:
             obj.status = "failed"
             obj.error_info = error
             self.session.commit()
+
+    def add_tokens(self, run_id: str, count: int) -> None:
+        obj = self.session.get(AgentRunORM, run_id)
+        if obj and count:
+            obj.token_count = (obj.token_count or 0) + count
+            self.session.commit()
+
+    def get_total_tokens(self) -> int:
+        from sqlalchemy import func
+
+        result = self.session.query(func.sum(AgentRunORM.token_count)).scalar()
+        return result or 0

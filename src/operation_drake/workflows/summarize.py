@@ -27,6 +27,11 @@ class SummarizeWorkflow:
             path = self.artifact_service.save(
                 title=result.title, content=md, task_id=task_id, artifact_type="summary"
             )
-            return WorkflowResult(success=True, artifact_path=path, summary=result.summary)
+            return WorkflowResult(
+                success=True,
+                artifact_path=path,
+                summary=result.summary,
+                token_count=result.input_tokens + result.output_tokens,
+            )
         except Exception as e:
             return WorkflowResult(success=False, error=str(e))

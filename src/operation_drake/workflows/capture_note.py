@@ -10,6 +10,7 @@ class WorkflowResult:
     artifact_path: str = ""
     summary: str = ""
     error: str = ""
+    token_count: int = 0
 
 
 class CaptureNoteWorkflow:
@@ -41,7 +42,10 @@ class CaptureNoteWorkflow:
                 title=result.title, content=md, task_id=task_id, artifact_type="note"
             )
             return WorkflowResult(
-                success=True, artifact_path=path, summary=result.summary or result.title
+                success=True,
+                artifact_path=path,
+                summary=result.summary or result.title,
+                token_count=result.input_tokens + result.output_tokens,
             )
         except Exception as e:
             return WorkflowResult(success=False, error=str(e))

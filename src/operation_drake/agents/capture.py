@@ -17,6 +17,8 @@ class CaptureResult:
     tags: list[str] = field(default_factory=list)
     summary: str = ""
     action_items: list[str] = field(default_factory=list)
+    input_tokens: int = 0
+    output_tokens: int = 0
 
 
 class CaptureAgent(BaseAgent):
@@ -42,4 +44,6 @@ class CaptureAgent(BaseAgent):
             tags=data.get("tags", []),
             summary=data.get("summary", ""),
             action_items=data.get("action_items", []),
+            input_tokens=resp.input_tokens,
+            output_tokens=resp.output_tokens,
         )

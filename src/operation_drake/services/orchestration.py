@@ -59,6 +59,7 @@ class ProcessResult:
     clarification_question: str | None
     artifact_path: str | None
     result_summary: str
+    session_tokens: int = 0
 
 
 class OrchestratorService:
@@ -154,6 +155,7 @@ class OrchestratorService:
             self._task_repo.transition(task.id, TaskStatus.normalizing)
             self._task_repo.transition(task.id, TaskStatus.interpreting)
             self._task_repo.transition(task.id, TaskStatus.awaiting_approval)
+            session_tokens = self._run_repo.get_total_tokens()
             return ProcessResult(
                 message_id=msg.id,
                 task_id=task.id,
@@ -165,6 +167,7 @@ class OrchestratorService:
                 clarification_question=decision.clarification_question,
                 artifact_path=None,
                 result_summary="Awaiting your approval.",
+                session_tokens=session_tokens,
             )
 
         self._task_repo.transition(task.id, TaskStatus.normalizing)
@@ -172,13 +175,15 @@ class OrchestratorService:
         self._task_repo.transition(task.id, TaskStatus.approved)
         self._task_repo.transition(task.id, TaskStatus.running)
 
-        artifact_path, result_summary = self._execute_workflow(
+        artifact_path, result_summary, wf_tokens = self._execute_workflow(
             intent=decision.primary_intent,
             content=normalized.normalized_text,
             task_id=task.id,
             project=project,
             attachment_path=attachment_path,
         )
+        if wf_tokens:
+            self._run_repo.add_tokens(run.id, wf_tokens)
 
         self._task_repo.transition(task.id, TaskStatus.completed)
         if artifact_path:
@@ -252,7 +257,7 @@ class OrchestratorService:
         )
 
         try:
-            artifact_path, result_summary = self._execute_workflow(
+            artifact_path, result_summary, wf_tokens = self._execute_workflow(
                 intent=task.task_type,
                 content=content,
                 task_id=task_id,
@@ -260,7 +265,7 @@ class OrchestratorService:
                 attachment_path=None,
             )
             self._task_repo.transition(task_id, TaskStatus.completed)
-            self._run_repo.complete(run.id, output_summary=result_summary)
+            self._run_repo.complete(run.id, output_summary=result_summary, token_count=wf_tokens or None)
             if artifact_path:
                 self._artifact_repo.create(
                     ArtifactCreate(
@@ -436,7 +441,7 @@ class OrchestratorService:
         task_id: str,
         project: str | None,
         attachment_path: str | None,
-    ) -> tuple[str | None, str]:
+    ) -> tuple[str | None, str, int]:
         if intent == "save_note":
             r = CaptureNoteWorkflow(self._capture_agent, self._artifact_svc).run(
                 content, task_id, project
@@ -460,5 +465,9 @@ class OrchestratorService:
                 f"Saved link: {content}", task_id, project
             )
         else:
-            return None, "No workflow available for this intent."
-        return (r.artifact_path if r.success else None), (r.summary if r.success else r.error)
+            return None, "No workflow available for this intent.", 0
+        return (
+            (r.artifact_path if r.success else None),
+            (r.summary if r.success else r.error),
+            r.token_count if r.success else 0,
+        )
