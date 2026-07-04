@@ -176,12 +176,12 @@ def run_setup_notion(settings: Settings) -> int:
 
         client = Client(auth=settings.notion_api_token)
 
-        search = client.search(
-            query="D.R.A.K.E. Knowledge Vault",
-            filter={"value": "database", "property": "object"},
-        )
+        # Search without type filter (Notion API no longer accepts "database" as filter value)
+        search = client.search(query="D.R.A.K.E. Knowledge Vault")
         parent_id_clean = settings.notion_parent_page_id.replace("-", "")
         for result in search.get("results", []):
+            if result.get("object") != "database":
+                continue
             parent = result.get("parent", {})
             if parent.get("page_id", "").replace("-", "") == parent_id_clean:
                 db_id = result["id"]
