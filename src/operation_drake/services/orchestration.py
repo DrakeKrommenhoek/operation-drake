@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -60,6 +61,11 @@ class ProcessResult:
     artifact_path: str | None
     result_summary: str
     session_tokens: int = 0
+    notion_sync_status: str | None = None
+    notion_page_url: str | None = None
+    notion_project: str | None = None
+    notion_content_type: str | None = None
+    notion_needs_review: bool = False
 
 
 class OrchestratorService:
@@ -69,6 +75,7 @@ class OrchestratorService:
         llm: LLMProvider,
         transcriber: TranscriptionProvider,
         artifacts_dir: str,
+        notion_sync_service=None,
     ):
         self._session = session
         self._msg_repo = MessageRepository(session)
@@ -81,6 +88,12 @@ class OrchestratorService:
         self._synthesis_agent = SynthesisAgent(llm=llm)
         self._transcriber = transcriber
         self._artifact_svc = ArtifactService(artifacts_dir=artifacts_dir)
+        self._notion_svc = notion_sync_service
+        if notion_sync_service is not None:
+            from operation_drake.integrations.notion.classifier import NotionClassifier
+            self._notion_classifier = NotionClassifier(llm=llm)
+        else:
+            self._notion_classifier = None
 
     def process(
         self,
@@ -186,8 +199,9 @@ class OrchestratorService:
             self._run_repo.add_tokens(run.id, wf_tokens)
 
         self._task_repo.transition(task.id, TaskStatus.completed)
+        artifact_id: str | None = None
         if artifact_path:
-            self._artifact_repo.create(
+            artifact_orm = self._artifact_repo.create(
                 ArtifactCreate(
                     task_id=task.id,
                     artifact_type=decision.primary_intent,
@@ -196,6 +210,18 @@ class OrchestratorService:
                     content_preview=result_summary[:200],
                 )
             )
+            artifact_id = artifact_orm.id
+
+        n_status, n_url, n_proj, n_type, n_review = self._sync_to_notion(
+            task_id=task.id,
+            artifact_id=artifact_id,
+            content=normalized.normalized_text,
+            result_summary=result_summary,
+            intent=decision.primary_intent,
+            project=project,
+            channel=channel,
+            message_type=normalized.message_type,
+        )
 
         return ProcessResult(
             message_id=msg.id,
@@ -208,6 +234,11 @@ class OrchestratorService:
             clarification_question=None,
             artifact_path=artifact_path,
             result_summary=result_summary,
+            notion_sync_status=n_status,
+            notion_page_url=n_url,
+            notion_project=n_proj,
+            notion_content_type=n_type,
+            notion_needs_review=n_review,
         )
 
     def execute_approved_task(self, task_id: str) -> ProcessResult:
@@ -266,8 +297,9 @@ class OrchestratorService:
             )
             self._task_repo.transition(task_id, TaskStatus.completed)
             self._run_repo.complete(run.id, output_summary=result_summary, token_count=wf_tokens or None)
+            artifact_id: str | None = None
             if artifact_path:
-                self._artifact_repo.create(
+                artifact_orm = self._artifact_repo.create(
                     ArtifactCreate(
                         task_id=task_id,
                         artifact_type=task.task_type,
@@ -276,6 +308,17 @@ class OrchestratorService:
                         content_preview=result_summary[:200],
                     )
                 )
+                artifact_id = artifact_orm.id
+            n_status, n_url, n_proj, n_type, n_review = self._sync_to_notion(
+                task_id=task_id,
+                artifact_id=artifact_id,
+                content=content,
+                result_summary=result_summary,
+                intent=task.task_type,
+                project=task.project,
+                channel="telegram",
+                message_type="text",
+            )
             return ProcessResult(
                 message_id=task.inbound_message_id,
                 task_id=task_id,
@@ -287,6 +330,11 @@ class OrchestratorService:
                 clarification_question=None,
                 artifact_path=artifact_path,
                 result_summary=result_summary,
+                notion_sync_status=n_status,
+                notion_page_url=n_url,
+                notion_project=n_proj,
+                notion_content_type=n_type,
+                notion_needs_review=n_review,
             )
         except Exception as e:
             self._task_repo.set_error(task_id, str(e))
@@ -433,6 +481,51 @@ class OrchestratorService:
             artifact_path=None,
             result_summary=f"Re-interpreted as: {decision.proposed_action}",
         )
+
+    def _sync_to_notion(
+        self,
+        task_id: str,
+        artifact_id: str | None,
+        content: str,
+        result_summary: str,
+        intent: str,
+        project: str | None,
+        channel: str,
+        message_type: str,
+    ) -> tuple[str | None, str | None, str | None, str | None, bool]:
+        """Attempt Notion sync. Returns (sync_status, page_url, project, content_type, needs_review).
+        Never raises — Notion failure must not affect task status."""
+        if not self._notion_svc or not self._notion_classifier:
+            return None, None, None, None, False
+        try:
+            classification = self._notion_classifier.classify(
+                content=content,
+                workflow_summary=result_summary,
+                intent=intent,
+                existing_project=project,
+                channel=channel,
+                message_type=message_type,
+            )
+            classification.task_id = task_id
+            classification.artifact_id = artifact_id
+            sync_result = self._notion_svc.sync(
+                task_id=task_id,
+                artifact_id=artifact_id,
+                classification=classification,
+                captured_at=datetime.now(UTC),
+                channel=channel,
+                message_type=message_type,
+            )
+            return (
+                sync_result.status,
+                sync_result.page_url,
+                classification.project,
+                classification.content_type,
+                sync_result.needs_review,
+            )
+        except Exception as e:
+            logger.error({"action": "notion_sync_error", "task_id": task_id, "error": str(e)[:100]})
+            return "failed", None, None, None, False
 
     def _execute_workflow(
         self,

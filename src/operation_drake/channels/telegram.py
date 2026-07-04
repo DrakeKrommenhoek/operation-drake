@@ -113,6 +113,21 @@ def _format_result(result) -> str:
         lines.append(f"Result: {result.result_summary}")
     if result.artifact_path:
         lines.append("Artifact saved.")
+    notion_status = getattr(result, "notion_sync_status", None)
+    if notion_status and notion_status not in ("disabled", "skipped"):
+        lines.append("")
+        if getattr(result, "notion_project", None):
+            lines.append(f"Project: {result.notion_project}")
+        if getattr(result, "notion_content_type", None):
+            lines.append(f"Type: {result.notion_content_type}")
+        if notion_status in ("synced", "updated", "already_synced"):
+            lines.append("Notion: synced")
+            if getattr(result, "notion_page_url", None):
+                lines.append(result.notion_page_url)
+        elif notion_status == "failed":
+            lines.append("Notion: pending (will retry with /sync_pending)")
+        if getattr(result, "notion_needs_review", False):
+            lines.append("Note: saved to Needs Review -- classification was uncertain")
     return "\n".join(lines)
 
 
@@ -122,11 +137,26 @@ def _format_result(result) -> str:
 
 
 def _make_orchestrator(artifacts_dir: str) -> OrchestratorService:
+    from operation_drake.integrations.notion import get_notion_client
+    from operation_drake.integrations.notion.sync_service import NotionSyncService
+
+    settings = get_settings()
+    session = get_session()
+    notion_svc = None
+    if settings.notion_enabled:
+        notion_client = get_notion_client(settings)
+        notion_svc = NotionSyncService(
+            session=session,
+            client=notion_client,
+            database_id=settings.notion_database_id,
+            low_confidence_threshold=settings.notion_low_confidence_threshold,
+        )
     return OrchestratorService(
-        session=get_session(),
+        session=session,
         llm=get_llm_provider(),
         transcriber=get_transcription_provider(),
         artifacts_dir=artifacts_dir,
+        notion_sync_service=notion_svc,
     )
 
 
