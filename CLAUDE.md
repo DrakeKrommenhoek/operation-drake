@@ -87,6 +87,10 @@ python scripts/dry_run.py                 # full pipeline dry-run (no credential
 Auto-execute (no approval needed):
 - save_note, summarize, extract_actions, research_brief, save_link, transcribe_voice
 
+Exception: the explicit `/brief <topic>` command (see `docs/planning/03-v2-plan-confirm-execute.md`)
+is a distinct job type, not a reclassification of the `research_brief` intent — it always
+goes through its own plan/approve/execute queue even though `research_brief` is a SAFE_INTENT.
+
 Require approval before executing:
 - Sending email or messages
 - Posting publicly

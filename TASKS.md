@@ -105,6 +105,15 @@
 - [x] Production backup: backup_20260704_202520.tar.gz (20K)
 - [x] CURRENT_STATE.md updated with live Notion status
 
+## Completed — Session 7 (2026-07-07)
+
+- [x] Imported 7 planning specs from the Claude Project into `docs/planning/` (00-COMMAND-CENTER through 06-wellness-agent)
+- [x] Reconciled divergence between the specs' v1.1-v4/06 model and the repo's Phase 1-8 `ROADMAP.md`
+- [x] Decision: v1.1/v1.2/v2/v3/v4/06 naming adopted as primary; old Phase 1-8 retired to a mapping appendix
+- [x] Decision: `/brief` is a distinct job type from the `research_brief` SAFE_INTENT; casual-capture auto-execute is unchanged — documented in `CLAUDE.md` and `ROADMAP.md`
+- [x] `ROADMAP.md` rewritten around the v-numbered specs, stale CarPlay item struck (superseded by v4 Module B / Telegram voice)
+- [x] Confirmed no code conflict exists today: `SAFE_INTENTS` in `services/approval.py` already implements the auto-capture side of v1.1; the write-back/dedupe/meta-noise-filter scope in `01-v1_1-close-the-loop.md` is unbuilt, not conflicting
+
 ## Pending — Session 7
 
 - [ ] Send 6 live Telegram scenarios and verify Notion pages manually
@@ -112,3 +121,4 @@
 - [ ] Run `/notion`, `/sync_pending`, `/status`, `/projects`, `/inbox`, `/cost` via Telegram
 - [ ] Build social-media / URL capture workflow (see docs/superpowers/specs/2026-07-04-social-media-capture-design.md)
 - [ ] Model selection: choose between gpt-4o-mini and gpt-4o per intent
+- [ ] Start v1.1 Close the Loop build: SHA-256 dedupe, `/done /archive /action /project` write-back commands, meta-noise filter, stale check-in auto-archive
