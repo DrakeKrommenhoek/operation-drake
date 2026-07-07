@@ -114,11 +114,25 @@
 - [x] `ROADMAP.md` rewritten around the v-numbered specs, stale CarPlay item struck (superseded by v4 Module B / Telegram voice)
 - [x] Confirmed no code conflict exists today: `SAFE_INTENTS` in `services/approval.py` already implements the auto-capture side of v1.1; the write-back/dedupe/meta-noise-filter scope in `01-v1_1-close-the-loop.md` is unbuilt, not conflicting
 
-## Pending — Session 7
+## Completed — Session 8 (2026-07-07): v1.1 Close the Loop build
+
+- [x] SHA-256 dedupe: `seen_messages` table, hash recorded only on genuine task completion (not on capture attempts that are later rejected), 30-day window, "Already captured: [link]" reply
+- [x] Meta-noise filter: `MetaNoiseFilterAgent` classifies capture/question/command before routing; questions answered inline with no Notion write, commands get a usage hint, low-confidence captures (<60) prompt "Save this? Reply y/n" via a per-sender `pending_captures` table
+- [x] Telegram write-back commands: `/done`, `/archive`, `/action`, `/project <name>` patch the Notion page a reply targets (or the sender's own most recent capture if sent bare) via new `WriteBackService` + `NotionSyncService.update_properties`
+- [x] Stale check-in auto-archive: `scripts/archive_stale_checkins.py` (`make archive-stale-checkins`) archives Workday Check-in entries idle 7+ days
+- [x] 8-angle code review run against the full diff; 13 findings, 11 fixed (2 documented as accepted known limitations — see below), including a real regression that broke `scripts/dry_run.py` and a multi-user cross-talk bug in the reply-target/most-recent-task resolution
+- [x] 246 tests pass (up from 193), ruff clean, `dry_run.py` re-verified working end to end
+
+### Known limitations (accepted, not blocking)
+- Dedupe only records a hash once a task *completes* — an identical message resubmitted while the first copy is still `awaiting_approval` isn't caught (narrow: only affects non-SAFE_INTENTS, which are rare, deliberate actions).
+- A stale low-confidence "Save this? y/n" prompt is only cleared by an explicit y/n reply or superseded by the next low-confidence event, not by an unrelated high-confidence message in between.
+
+## Pending — Session 9
 
 - [ ] Send 6 live Telegram scenarios and verify Notion pages manually
 - [ ] Send voice notes for S5 (pre-work) and S6 (post-work) to verify Whisper + Notion sync
 - [ ] Run `/notion`, `/sync_pending`, `/status`, `/projects`, `/inbox`, `/cost` via Telegram
+- [ ] Live-verify v1.1: `/done`, `/archive`, `/action`, `/project` write-back commands and the meta-noise y/n confirmation flow against production Telegram + Notion
 - [ ] Build social-media / URL capture workflow (see docs/superpowers/specs/2026-07-04-social-media-capture-design.md)
 - [ ] Model selection: choose between gpt-4o-mini and gpt-4o per intent
-- [ ] Start v1.1 Close the Loop build: SHA-256 dedupe, `/done /archive /action /project` write-back commands, meta-noise filter, stale check-in auto-archive
+- [ ] Start the 14-day soak on v1.1 before moving to v1.2 Sunday Review (per `ROADMAP.md`'s one-phase-at-a-time gate)

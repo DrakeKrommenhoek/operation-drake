@@ -23,7 +23,7 @@ alongside v1.1:
 - [ ] YouTube video URL preserves link + prompts for transcript
 - [ ] Voice transcription tested end-to-end with Whisper (live, not mock)
 
-## v1.1: Close the Loop — IN PROGRESS
+## v1.1: Close the Loop — BUILT, SOAKING
 
 Spec: `docs/planning/01-v1_1-close-the-loop.md` | Gate: ships, then 14-day soak
 
@@ -31,11 +31,15 @@ Already shipped (Session 5-6 Notion work landed ahead of this spec):
 - [x] Notion one-way sync, LLM classification -> project / content type / capture context
 - [x] Explicit override detection, Needs Review flagging on low confidence
 
-Spec scope still open:
-- [ ] SHA-256 dedupe / idempotency (`seen_messages` table)
-- [ ] `/done`, `/archive`, `/action`, `/project <name>` Telegram write-back commands
-- [ ] CAPTURE vs QUESTION vs COMMAND meta-noise filter
-- [ ] Auto-archive stale Workday Check-ins after 7 days
+Spec scope (Session 8):
+- [x] SHA-256 dedupe / idempotency (`seen_messages` table, 30-day window)
+- [x] `/done`, `/archive`, `/action`, `/project <name>` Telegram write-back commands
+- [x] CAPTURE vs QUESTION vs COMMAND meta-noise filter (with y/n confirmation for low-confidence captures)
+- [x] Auto-archive stale Workday Check-ins after 7 days (`scripts/archive_stale_checkins.py`)
+
+Not yet done:
+- [ ] 14-day soak in production (start once the Session 9 live-verification pass below is clean)
+- [ ] Live Telegram verification of all four pieces against production Notion (see `TASKS.md` Pending — Session 9)
 
 ## v1.2: Sunday Weekly Review — NOT STARTED
 
