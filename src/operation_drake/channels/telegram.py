@@ -291,7 +291,8 @@ class TelegramAdapter(ChannelAdapter):
         await _reply(update, "\n".join(lines))
 
     async def _cmd_approve(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        if not self._is_allowed(str(update.effective_user.id)):
+        uid = str(update.effective_user.id)
+        if not self._is_allowed(uid):
             return
         if not context.args:
             await _reply(update, "Usage: /approve <task_id>")
@@ -299,10 +300,10 @@ class TelegramAdapter(ChannelAdapter):
         task_id = context.args[0]
         await _reply(update, f"Approving task {task_id[:8]}...")
         loop = asyncio.get_event_loop()
-        reply = await loop.run_in_executor(None, self._do_approve, task_id)
+        reply, completed = await loop.run_in_executor(None, self._do_approve, task_id)
         sent = await _reply(update, reply)
-        if "not found" not in reply:
-            self._record_reply_map(sent, task_id)
+        if completed:
+            await loop.run_in_executor(None, self._record_reply_map, sent, uid, task_id)
 
     async def _cmd_reject(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._is_allowed(str(update.effective_user.id)):
@@ -420,13 +421,20 @@ class TelegramAdapter(ChannelAdapter):
         await self._run_writeback(update, "project", " ".join(context.args))
 
     async def _run_writeback(self, update: Update, action: str, arg: str | None) -> None:
-        task_id = self._resolve_target_task_id(update)
-        if not task_id:
-            await _reply(update, "No capture found to apply that to.")
-            return
+        uid = str(update.effective_user.id)
         loop = asyncio.get_event_loop()
-        reply = await loop.run_in_executor(None, self._do_writeback, action, task_id, arg)
+        reply = await loop.run_in_executor(
+            None, self._resolve_and_writeback, update, uid, action, arg
+        )
         await _reply(update, reply)
+
+    def _resolve_and_writeback(
+        self, update: Update, sender_id: str, action: str, arg: str | None
+    ) -> str:
+        task_id = self._resolve_target_task_id(update, sender_id)
+        if not task_id:
+            return "No capture found to apply that to."
+        return self._do_writeback(action, task_id, arg)
 
     # -----------------------------------------------------------------------
     # Message handlers
@@ -456,7 +464,7 @@ class TelegramAdapter(ChannelAdapter):
         )
         sent = await _reply(update, response)
         if task_id:
-            self._record_reply_map(sent, task_id)
+            await loop.run_in_executor(None, self._record_reply_map, sent, uid, task_id)
 
     async def _handle_voice(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         uid = str(update.effective_user.id)
@@ -497,28 +505,31 @@ class TelegramAdapter(ChannelAdapter):
             forwarded_from=forwarded_from,
             external_message_id=ext_id,
         )
-        task_id = result.task_id if result.status == "completed" else None
+        # Map whenever a real task exists, not just on immediate completion —
+        # awaiting_approval and duplicate replies are still valid reply
+        # targets for a later /done, /archive, /action, or /project.
+        task_id = result.task_id or None
         return _format_result(result), task_id
 
-    def _record_reply_map(self, messages: list, task_id: str) -> None:
+    def _record_reply_map(self, messages: list, sender_id: str, task_id: str) -> None:
         from operation_drake.storage.repositories import TelegramReplyMapRepository
 
         repo = TelegramReplyMapRepository(get_session())
         for m in messages:
             if m is not None:
-                repo.record(str(m.message_id), task_id)
+                repo.record(sender_id, str(m.message_id), task_id)
 
-    def _resolve_target_task_id(self, update: Update) -> str | None:
+    def _resolve_target_task_id(self, update: Update, sender_id: str) -> str | None:
         from operation_drake.storage.repositories import TaskRepository, TelegramReplyMapRepository
 
         session = get_session()
         if update.message.reply_to_message:
             mapped = TelegramReplyMapRepository(session).resolve(
-                str(update.message.reply_to_message.message_id)
+                sender_id, str(update.message.reply_to_message.message_id)
             )
             if mapped:
                 return mapped
-        recent = TaskRepository(session).list_recent(limit=1)
+        recent = TaskRepository(session).list_recent_by_sender(sender_id, limit=1)
         return recent[0].id if recent else None
 
     def _process_voice_sync(self, audio_path: str, sender_id: str, ext_id: str) -> str:
@@ -532,16 +543,16 @@ class TelegramAdapter(ChannelAdapter):
         )
         return f"Voice note: {result.result_summary}"
 
-    def _do_approve(self, task_id: str) -> str:
+    def _do_approve(self, task_id: str) -> tuple[str, bool]:
         result = _make_orchestrator(self._settings.artifacts_dir).execute_approved_task(task_id)
         if result.status == "not_found":
-            return f"Task {task_id} not found."
+            return f"Task {task_id} not found.", False
         lines = ["Task approved and executed.", f"Status: {result.status}"]
         if result.result_summary:
             lines.append(f"Result: {result.result_summary}")
         if result.artifact_path:
             lines.append("Artifact saved.")
-        return "\n".join(lines)
+        return "\n".join(lines), result.status == "completed"
 
     def _do_reject(self, task_id: str) -> str:
         result = _make_orchestrator(self._settings.artifacts_dir).reject_task(task_id)

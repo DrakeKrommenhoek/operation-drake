@@ -121,9 +121,13 @@ class SeenMessageORM(Base):
 
 class TelegramReplyMapORM(Base):
     """Maps a bot-sent Telegram message id back to the task it reported on,
-    so a reply (/done, /archive, /action, /project) can resolve its target."""
+    so a reply (/done, /archive, /action, /project) can resolve its target.
+    Telegram message ids are only unique per chat, so sender_id (the chat
+    owner, for these 1:1 bot chats) is part of the key — otherwise two
+    different users' Nth bot message would collide on the same row."""
 
     __tablename__ = "telegram_reply_map"
+    sender_id: Mapped[str] = mapped_column(String, primary_key=True)
     telegram_message_id: Mapped[str] = mapped_column(String, primary_key=True)
     task_id: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
@@ -139,6 +143,7 @@ class PendingCaptureORM(Base):
     message_type: Mapped[str] = mapped_column(String, default="text")
     forwarded_from: Mapped[str | None] = mapped_column(String, nullable=True)
     external_message_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    inbound_message_id: Mapped[str | None] = mapped_column(String, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

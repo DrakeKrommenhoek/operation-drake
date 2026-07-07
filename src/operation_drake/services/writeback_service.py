@@ -4,6 +4,9 @@ from dataclasses import dataclass
 
 from operation_drake.integrations.notion.models import VALID_PROJECTS, match_project
 from operation_drake.integrations.notion.sync_service import NotionSyncService
+from operation_drake.observability.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -21,14 +24,32 @@ class WriteBackService:
 
     def _apply(self, task_id: str, properties: dict, confirm: str) -> WriteBackResult:
         if not self._notion_svc:
+            logger.warning(
+                {"action": "writeback_skipped", "task_id": task_id, "reason": "notion_disabled"}
+            )
             return WriteBackResult(ok=False, message="Notion is not enabled.")
         result = self._notion_svc.update_properties(task_id, properties)
         if result.status == "not_found":
+            logger.warning({"action": "writeback_not_found", "task_id": task_id})
             return WriteBackResult(ok=False, message="No synced Notion page found for that task.")
         if result.status == "failed":
+            logger.error(
+                {
+                    "action": "writeback_failed",
+                    "task_id": task_id,
+                    "error_category": result.error_category or "unknown",
+                }
+            )
             return WriteBackResult(
                 ok=False, message=f"Notion update failed ({result.error_category or 'unknown'})."
             )
+        logger.info(
+            {
+                "action": "writeback_applied",
+                "task_id": task_id,
+                "properties": list(properties.keys()),
+            }
+        )
         return WriteBackResult(ok=True, message=confirm)
 
     def mark_done(self, task_id: str) -> WriteBackResult:

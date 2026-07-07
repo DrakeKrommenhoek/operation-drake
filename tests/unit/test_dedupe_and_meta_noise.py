@@ -168,3 +168,47 @@ def test_voice_message_skips_meta_noise_gate():
             attachment_path="/fake/voice.ogg",
         )
         assert result.status != "answered"
+
+
+def test_voice_captures_are_never_recorded_in_dedupe_table():
+    """Voice normalized_text is the same placeholder for every note, so
+    recording it in seen_messages would collapse all voice captures onto
+    one dedupe entry and never actually detect a duplicate."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        orch = _make_orchestrator(tmpdir)
+        first = orch.process(
+            channel="telegram",
+            raw_text="[Voice note]",
+            message_type="voice",
+            sender_id="u1",
+            attachment_path="/fake/voice.ogg",
+        )
+        assert first.status != "duplicate"
+        second = orch.process(
+            channel="telegram",
+            raw_text="[Voice note]",
+            message_type="voice",
+            sender_id="u1",
+            attachment_path="/fake/voice2.ogg",
+        )
+        assert second.status != "duplicate"
+
+
+# ---------------------------------------------------------------------------
+# Confirming a low-confidence capture reuses its InboundMessage row
+# ---------------------------------------------------------------------------
+
+
+def test_confirming_low_confidence_capture_does_not_duplicate_inbound_message():
+    from operation_drake.models.database import InboundMessageORM
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        orch = _make_orchestrator(tmpdir, llm=_LowConfidenceThenNormalLLM())
+        before = orch._session.query(InboundMessageORM).count()
+        orch.process(channel="telegram", raw_text="hmm not sure about this", sender_id="u1")
+        after_prompt = orch._session.query(InboundMessageORM).count()
+        assert after_prompt == before + 1
+
+        orch.process(channel="telegram", raw_text="y", sender_id="u1")
+        after_confirm = orch._session.query(InboundMessageORM).count()
+        assert after_confirm == after_prompt

@@ -20,6 +20,7 @@ db_module._SessionLocal = None
 
 from operation_drake.agents.router import RouterAgent  # noqa: E402
 from operation_drake.config import get_settings  # noqa: E402
+from operation_drake.llm.base import LLMResponse  # noqa: E402
 from operation_drake.llm.mock_provider import MockLLMProvider  # noqa: E402
 from operation_drake.models.database import (  # noqa: E402
     AgentRunORM,
@@ -37,8 +38,30 @@ get_settings.cache_clear()
 init_db()
 
 
+class _FixedRouterLLM(MockLLMProvider):
+    """Fixes the router's response for these demos while leaving the
+    meta-noise triage gate on its normal (capture, high-confidence) default —
+    otherwise a router-focused fixed_response (e.g. confidence:0.7) would also
+    feed the triage classifier and get misread as a low-confidence capture."""
+
+    def __init__(self, router_response: str):
+        super().__init__()
+        self._router_response = router_response
+
+    def complete(self, prompt, system="", json_response=None, **kwargs):
+        if "triage" in prompt.lower():
+            return super().complete(prompt, system=system, json_response=json_response, **kwargs)
+        return LLMResponse(
+            content=self._router_response,
+            provider="mock",
+            model="mock-v1",
+            input_tokens=10,
+            output_tokens=20,
+        )
+
+
 def make_orch(fixed_response=None):
-    llm = MockLLMProvider(fixed_response=fixed_response) if fixed_response else MockLLMProvider()
+    llm = _FixedRouterLLM(fixed_response) if fixed_response else MockLLMProvider()
     return OrchestratorService(
         session=get_session(),
         llm=llm,

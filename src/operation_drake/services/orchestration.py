@@ -134,6 +134,7 @@ class OrchestratorService:
                         forwarded_from=pending.forwarded_from,
                         attachment_path=None,
                         external_message_id=pending.external_message_id,
+                        existing_message_id=pending.inbound_message_id,
                     )
                 if reply in ("n", "no"):
                     self._pending_repo.clear(sender_id)
@@ -243,16 +244,6 @@ class OrchestratorService:
                 )
 
             if meta.confidence < LOW_CONFIDENCE_CAPTURE_THRESHOLD:
-                self._pending_repo.set(
-                    PendingCaptureCreate(
-                        sender_id=sender_id,
-                        channel=channel,
-                        raw_text=raw_text,
-                        message_type=message_type,
-                        forwarded_from=forwarded_from,
-                        external_message_id=external_message_id,
-                    )
-                )
                 msg = self._log_gated_message(
                     channel,
                     raw_text,
@@ -262,6 +253,17 @@ class OrchestratorService:
                     external_message_id,
                     content_hash,
                     "awaiting_confirmation",
+                )
+                self._pending_repo.set(
+                    PendingCaptureCreate(
+                        sender_id=sender_id,
+                        channel=channel,
+                        raw_text=raw_text,
+                        message_type=message_type,
+                        forwarded_from=forwarded_from,
+                        external_message_id=external_message_id,
+                        inbound_message_id=msg.id,
+                    )
                 )
                 return ProcessResult(
                     message_id=msg.id,
@@ -284,6 +286,7 @@ class OrchestratorService:
             forwarded_from=forwarded_from,
             attachment_path=attachment_path,
             external_message_id=external_message_id,
+            normalized=normalized,
         )
 
     def _log_gated_message(
@@ -328,23 +331,33 @@ class OrchestratorService:
         forwarded_from: str | None = None,
         attachment_path: str | None = None,
         external_message_id: str | None = None,
+        normalized=None,
+        existing_message_id: str | None = None,
     ) -> ProcessResult:
-        normalized = normalize_message(raw_text, message_type, forwarded_from)
-        content_hash = compute_message_hash(normalized.normalized_text)
+        if normalized is None:
+            normalized = normalize_message(raw_text, message_type, forwarded_from)
 
-        msg = self._msg_repo.create(
-            InboundMessageCreate(
-                channel=channel,
-                external_message_id=external_message_id or str(uuid.uuid4()),
-                sender_id=sender_id,
-                raw_text=raw_text,
-                normalized_text=normalized.normalized_text,
-                message_type=normalized.message_type,
-                forwarded_from=forwarded_from,
-                processing_status=TaskStatus.normalizing.value,
-                content_hash=content_hash,
+        if existing_message_id:
+            # Confirmed low-confidence capture: reuse the InboundMessage row
+            # already logged when the y/n prompt was sent, instead of
+            # creating a second row for the same real content.
+            msg = self._msg_repo.get(existing_message_id)
+            content_hash = msg.content_hash
+        else:
+            content_hash = compute_message_hash(normalized.normalized_text)
+            msg = self._msg_repo.create(
+                InboundMessageCreate(
+                    channel=channel,
+                    external_message_id=external_message_id or str(uuid.uuid4()),
+                    sender_id=sender_id,
+                    raw_text=raw_text,
+                    normalized_text=normalized.normalized_text,
+                    message_type=normalized.message_type,
+                    forwarded_from=forwarded_from,
+                    processing_status=TaskStatus.normalizing.value,
+                    content_hash=content_hash,
+                )
             )
-        )
         self._msg_repo.update_status(msg.id, TaskStatus.interpreting.value)
 
         run = self._run_repo.create(
@@ -425,7 +438,10 @@ class OrchestratorService:
             self._run_repo.add_tokens(run.id, wf_tokens)
 
         self._task_repo.transition(task.id, TaskStatus.completed)
-        if content_hash:
+        if content_hash and normalized.message_type != "voice":
+            # Voice normalized_text is the pre-transcription placeholder
+            # ("[Voice note]") — identical for every voice note, so recording
+            # it would collapse all voice captures onto one dedupe entry.
             self._seen_repo.record(content_hash, task.id)
         artifact_id: str | None = None
         if artifact_path:
@@ -527,7 +543,7 @@ class OrchestratorService:
             self._run_repo.complete(
                 run.id, output_summary=result_summary, token_count=wf_tokens or None
             )
-            if msg and msg.content_hash:
+            if msg and msg.content_hash and msg.message_type != "voice":
                 self._seen_repo.record(msg.content_hash, task_id)
             artifact_id: str | None = None
             if artifact_path:

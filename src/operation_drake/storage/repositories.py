@@ -80,6 +80,19 @@ class TaskRepository:
     def list_recent(self, limit: int = 20) -> list[TaskORM]:
         return self.session.query(TaskORM).order_by(TaskORM.created_at.desc()).limit(limit).all()
 
+    def list_recent_by_sender(self, sender_id: str, limit: int = 20) -> list[TaskORM]:
+        """Most recent tasks captured by a specific sender (via their
+        InboundMessage), so a bare write-back command in a multi-user
+        deployment never falls back to another user's most recent task."""
+        return (
+            self.session.query(TaskORM)
+            .join(InboundMessageORM, TaskORM.inbound_message_id == InboundMessageORM.id)
+            .filter(InboundMessageORM.sender_id == sender_id)
+            .order_by(TaskORM.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+
     def transition(self, task_id: str, new_status: TaskStatus) -> TaskORM:
         obj = self.session.get(TaskORM, task_id)
         if not obj:
@@ -237,15 +250,16 @@ class SeenMessageRepository:
 
 
 class TelegramReplyMapRepository:
-    """Maps a bot-sent Telegram message id to the task it reported on."""
+    """Maps a bot-sent Telegram message id to the task it reported on,
+    scoped per sender since message ids are only unique within a chat."""
 
     def __init__(self, session: Session):
         self.session = session
 
-    def record(self, telegram_message_id: str, task_id: str) -> TelegramReplyMapORM:
+    def record(self, sender_id: str, telegram_message_id: str, task_id: str) -> TelegramReplyMapORM:
         obj = TelegramReplyMapORM(
             **TelegramReplyMapCreate(
-                telegram_message_id=telegram_message_id, task_id=task_id
+                sender_id=sender_id, telegram_message_id=telegram_message_id, task_id=task_id
             ).model_dump()
         )
         self.session.add(obj)
@@ -253,8 +267,8 @@ class TelegramReplyMapRepository:
         self.session.refresh(obj)
         return obj
 
-    def resolve(self, telegram_message_id: str) -> str | None:
-        obj = self.session.get(TelegramReplyMapORM, telegram_message_id)
+    def resolve(self, sender_id: str, telegram_message_id: str) -> str | None:
+        obj = self.session.get(TelegramReplyMapORM, (sender_id, telegram_message_id))
         return obj.task_id if obj else None
 
 

@@ -6,10 +6,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from operation_drake.models.database import Base, SeenMessageORM
-from operation_drake.models.schemas import PendingCaptureCreate
+from operation_drake.models.schemas import InboundMessageCreate, PendingCaptureCreate, TaskCreate
 from operation_drake.storage.repositories import (
+    MessageRepository,
     PendingCaptureRepository,
     SeenMessageRepository,
+    TaskRepository,
     TelegramReplyMapRepository,
 )
 
@@ -76,14 +78,23 @@ def test_seen_message_record_overwrites_existing_hash():
 def test_telegram_reply_map_record_and_resolve():
     session = _make_session()
     repo = TelegramReplyMapRepository(session)
-    repo.record("msg-100", "task-1")
-    assert repo.resolve("msg-100") == "task-1"
+    repo.record("u1", "msg-100", "task-1")
+    assert repo.resolve("u1", "msg-100") == "task-1"
 
 
 def test_telegram_reply_map_resolve_unknown_returns_none():
     session = _make_session()
     repo = TelegramReplyMapRepository(session)
-    assert repo.resolve("msg-999") is None
+    assert repo.resolve("u1", "msg-999") is None
+
+
+def test_telegram_reply_map_scoped_per_sender():
+    session = _make_session()
+    repo = TelegramReplyMapRepository(session)
+    repo.record("u1", "msg-5", "task-a")
+    repo.record("u2", "msg-5", "task-b")
+    assert repo.resolve("u1", "msg-5") == "task-a"
+    assert repo.resolve("u2", "msg-5") == "task-b"
 
 
 # ---------------------------------------------------------------------------
@@ -121,3 +132,35 @@ def test_pending_capture_clear_removes_it():
     repo.set(PendingCaptureCreate(sender_id="u1", channel="telegram", raw_text="maybe this"))
     repo.clear("u1")
     assert repo.get("u1") is None
+
+
+# ---------------------------------------------------------------------------
+# TaskRepository.list_recent_by_sender
+# ---------------------------------------------------------------------------
+
+
+def _create_task_for_sender(session, sender_id: str, title: str):
+    msg = MessageRepository(session).create(
+        InboundMessageCreate(channel="telegram", sender_id=sender_id, raw_text=title)
+    )
+    return TaskRepository(session).create(
+        TaskCreate(inbound_message_id=msg.id, title=title, task_type="save_note")
+    )
+
+
+def test_list_recent_by_sender_only_returns_that_senders_tasks():
+    session = _make_session()
+    _create_task_for_sender(session, "u1", "u1 first note")
+    task_b = _create_task_for_sender(session, "u2", "u2 note")
+    recent = TaskRepository(session).list_recent_by_sender("u2", limit=5)
+    assert [t.id for t in recent] == [task_b.id]
+
+
+def test_list_recent_by_sender_orders_most_recent_first():
+    session = _make_session()
+    older = _create_task_for_sender(session, "u1", "older")
+    newer = _create_task_for_sender(session, "u1", "newer")
+    older.created_at = datetime.now(UTC) - timedelta(minutes=5)
+    session.commit()
+    recent = TaskRepository(session).list_recent_by_sender("u1", limit=1)
+    assert recent[0].id == newer.id

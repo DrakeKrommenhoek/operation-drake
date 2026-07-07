@@ -22,17 +22,21 @@ VALID_PROJECTS: frozenset[str] = frozenset(
 
 
 def match_project(query: str) -> str | None:
-    """Fuzzy-match free text against the 12 valid Notion Project values."""
+    """Fuzzy-match free text against the 12 valid Notion Project values.
+    Iterates a sorted, stable order so a multi-match query resolves the
+    same way on every run (frozenset iteration order is not guaranteed
+    stable across process restarts)."""
     q = query.strip().lower()
     if not q:
         return None
-    for project in VALID_PROJECTS:
+    ordered = sorted(VALID_PROJECTS)
+    for project in ordered:
         if project.lower() == q:
             return project
-    for project in VALID_PROJECTS:
+    for project in ordered:
         if q in project.lower() or project.lower() in q:
             return project
-    lowered = {p.lower(): p for p in VALID_PROJECTS}
+    lowered = {p.lower(): p for p in ordered}
     close = difflib.get_close_matches(q, lowered.keys(), n=1, cutoff=0.6)
     return lowered[close[0]] if close else None
 

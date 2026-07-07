@@ -172,6 +172,7 @@ class SeenMessageCreate(BaseModel):
 
 
 class TelegramReplyMapCreate(BaseModel):
+    sender_id: str
     telegram_message_id: str
     task_id: str
 
@@ -183,6 +184,7 @@ class PendingCaptureCreate(BaseModel):
     message_type: str = MessageType.text
     forwarded_from: str | None = None
     external_message_id: str | None = None
+    inbound_message_id: str | None = None
 
 
 class NotionSyncCreate(BaseModel):
