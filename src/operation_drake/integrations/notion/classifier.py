@@ -3,28 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 
 from operation_drake.agents.base import BaseAgent
-from operation_drake.integrations.notion.models import NotionClassification
+from operation_drake.integrations.notion.models import VALID_PROJECTS, NotionClassification
 from operation_drake.llm.base import LLMProvider
 from operation_drake.observability.logging import get_logger
 
 logger = get_logger(__name__)
 
 _PROMPT_PATH = Path("prompts/notion_classifier.md")
-
-_VALID_PROJECTS = {
-    "General",
-    "Business Ideas",
-    "The Answer Movement",
-    "Ascend",
-    "Operation D.R.A.K.E.",
-    "DK Personal Health OS",
-    "Career & Work",
-    "School & Learning",
-    "Health & Fitness",
-    "Investing & Finance",
-    "Relationships & Networking",
-    "Personal Life",
-}
 
 _VALID_CONTENT_TYPES = {
     "Idea",
@@ -96,7 +81,7 @@ class NotionClassifier(BaseAgent):
             )
 
         project = data.get("project", "General")
-        if project not in _VALID_PROJECTS:
+        if project not in VALID_PROJECTS:
             project = "General"
 
         content_type = data.get("content_type", "General Note")

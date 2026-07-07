@@ -111,3 +111,20 @@ class LiveNotionClient(NotionClientInterface):
     def get_database_properties(self) -> dict:
         db = self._request("GET", f"/databases/{self._database_id}")
         return db.get("properties", {})
+
+    def query_stale_by_content_type(self, content_type: str, older_than_iso: str) -> list[dict]:
+        result = self._request(
+            "POST",
+            f"/databases/{self._database_id}/query",
+            json={
+                "filter": {
+                    "and": [
+                        {"property": "Content Type", "select": {"equals": content_type}},
+                        {"property": "Captured At", "date": {"before": older_than_iso}},
+                        {"property": "Status", "select": {"does_not_equal": "Archived"}},
+                    ]
+                },
+                "page_size": 100,
+            },
+        )
+        return result.get("results", [])

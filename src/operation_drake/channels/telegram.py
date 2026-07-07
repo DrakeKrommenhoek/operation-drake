@@ -83,10 +83,13 @@ def _split_message(text: str, max_len: int = TELEGRAM_MAX_LEN) -> list[str]:
     return chunks
 
 
-async def _reply(update: Update, text: str) -> None:
-    """Send a plain-text reply, splitting across multiple messages if needed."""
+async def _reply(update: Update, text: str) -> list:
+    """Send a plain-text reply, splitting across multiple messages if needed.
+    Returns the sent Message objects (used to record reply-target mappings)."""
+    sent = []
     for chunk in _split_message(_safe_text(text)):
-        await update.message.reply_text(chunk)
+        sent.append(await update.message.reply_text(chunk))
+    return sent
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +97,18 @@ async def _reply(update: Update, text: str) -> None:
 # ---------------------------------------------------------------------------
 
 
+_PLAIN_STATUSES = {
+    "duplicate",
+    "answered",
+    "command_hint",
+    "awaiting_capture_confirmation",
+    "discarded",
+}
+
+
 def _format_result(result) -> str:
+    if result.status in _PLAIN_STATUSES:
+        return result.result_summary
     lines = [
         f"Intent: {result.intent} ({result.confidence:.0%} confident)",
         f"Action: {result.proposed_action}",
@@ -193,6 +207,10 @@ class TelegramAdapter(ChannelAdapter):
         self._app.add_handler(CommandHandler("notion", self._cmd_notion))
         self._app.add_handler(CommandHandler("sync", self._cmd_sync))
         self._app.add_handler(CommandHandler("sync_pending", self._cmd_sync_pending))
+        self._app.add_handler(CommandHandler("done", self._cmd_done))
+        self._app.add_handler(CommandHandler("archive", self._cmd_archive))
+        self._app.add_handler(CommandHandler("action", self._cmd_action))
+        self._app.add_handler(CommandHandler("project", self._cmd_project))
         self._app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
         self._app.add_handler(MessageHandler(filters.VOICE, self._handle_voice))
         self._app.add_error_handler(self._error_handler)
@@ -248,7 +266,11 @@ class TelegramAdapter(ChannelAdapter):
             "/projects -- list known projects\n"
             "/notion -- Notion sync status\n"
             "/sync <task_id> -- retry Notion sync for a task\n"
-            "/sync_pending -- retry all pending Notion syncs\n\n"
+            "/sync_pending -- retry all pending Notion syncs\n"
+            "/done -- mark a capture Organized (reply to it, or applies to the most recent)\n"
+            "/archive -- mark a capture Archived\n"
+            "/action -- mark a capture Action Required\n"
+            "/project <name> -- set a capture's Project\n\n"
             "Or just send any message, voice note, or link.",
         )
 
@@ -278,7 +300,9 @@ class TelegramAdapter(ChannelAdapter):
         await _reply(update, f"Approving task {task_id[:8]}...")
         loop = asyncio.get_event_loop()
         reply = await loop.run_in_executor(None, self._do_approve, task_id)
-        await _reply(update, reply)
+        sent = await _reply(update, reply)
+        if "not found" not in reply:
+            self._record_reply_map(sent, task_id)
 
     async def _cmd_reject(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not self._is_allowed(str(update.effective_user.id)):
@@ -372,6 +396,38 @@ class TelegramAdapter(ChannelAdapter):
         reply = await loop.run_in_executor(None, self._do_sync_pending)
         await _reply(update, reply)
 
+    async def _cmd_done(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_allowed(str(update.effective_user.id)):
+            return
+        await self._run_writeback(update, "done", None)
+
+    async def _cmd_archive(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_allowed(str(update.effective_user.id)):
+            return
+        await self._run_writeback(update, "archive", None)
+
+    async def _cmd_action(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_allowed(str(update.effective_user.id)):
+            return
+        await self._run_writeback(update, "action", None)
+
+    async def _cmd_project(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not self._is_allowed(str(update.effective_user.id)):
+            return
+        if not context.args:
+            await _reply(update, "Usage: /project <name>")
+            return
+        await self._run_writeback(update, "project", " ".join(context.args))
+
+    async def _run_writeback(self, update: Update, action: str, arg: str | None) -> None:
+        task_id = self._resolve_target_task_id(update)
+        if not task_id:
+            await _reply(update, "No capture found to apply that to.")
+            return
+        loop = asyncio.get_event_loop()
+        reply = await loop.run_in_executor(None, self._do_writeback, action, task_id, arg)
+        await _reply(update, reply)
+
     # -----------------------------------------------------------------------
     # Message handlers
     # -----------------------------------------------------------------------
@@ -389,7 +445,7 @@ class TelegramAdapter(ChannelAdapter):
             msg_type = "forwarded"
         await update.message.reply_text("Processing...")
         loop = asyncio.get_event_loop()
-        response = await loop.run_in_executor(
+        response, task_id = await loop.run_in_executor(
             None,
             self._process_sync,
             text,
@@ -398,7 +454,9 @@ class TelegramAdapter(ChannelAdapter):
             forwarded_from,
             str(update.message.message_id),
         )
-        await _reply(update, response)
+        sent = await _reply(update, response)
+        if task_id:
+            self._record_reply_map(sent, task_id)
 
     async def _handle_voice(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         uid = str(update.effective_user.id)
@@ -430,7 +488,7 @@ class TelegramAdapter(ChannelAdapter):
 
     def _process_sync(
         self, text: str, msg_type: str, sender_id: str, forwarded_from: str | None, ext_id: str
-    ) -> str:
+    ) -> tuple[str, str | None]:
         result = _make_orchestrator(self._settings.artifacts_dir).process(
             channel="telegram",
             raw_text=text,
@@ -439,7 +497,29 @@ class TelegramAdapter(ChannelAdapter):
             forwarded_from=forwarded_from,
             external_message_id=ext_id,
         )
-        return _format_result(result)
+        task_id = result.task_id if result.status == "completed" else None
+        return _format_result(result), task_id
+
+    def _record_reply_map(self, messages: list, task_id: str) -> None:
+        from operation_drake.storage.repositories import TelegramReplyMapRepository
+
+        repo = TelegramReplyMapRepository(get_session())
+        for m in messages:
+            if m is not None:
+                repo.record(str(m.message_id), task_id)
+
+    def _resolve_target_task_id(self, update: Update) -> str | None:
+        from operation_drake.storage.repositories import TaskRepository, TelegramReplyMapRepository
+
+        session = get_session()
+        if update.message.reply_to_message:
+            mapped = TelegramReplyMapRepository(session).resolve(
+                str(update.message.reply_to_message.message_id)
+            )
+            if mapped:
+                return mapped
+        recent = TaskRepository(session).list_recent(limit=1)
+        return recent[0].id if recent else None
 
     def _process_voice_sync(self, audio_path: str, sender_id: str, ext_id: str) -> str:
         result = _make_orchestrator(self._settings.artifacts_dir).process(
@@ -572,6 +652,34 @@ class TelegramAdapter(ChannelAdapter):
                 lines.append(result.page_url)
             return "\n".join(lines)
         return f"Sync failed for task {task_id[:8]}. Category: {result.error_category or 'unknown'}"
+
+    def _do_writeback(self, action: str, task_id: str, arg: str | None) -> str:
+        from operation_drake.integrations.notion import get_notion_client
+        from operation_drake.integrations.notion.sync_service import NotionSyncService
+        from operation_drake.services.writeback_service import WriteBackService
+
+        s = self._settings
+        if not s.notion_enabled:
+            return "Notion is not enabled."
+        client = get_notion_client(s)
+        notion_svc = NotionSyncService(
+            session=get_session(),
+            client=client,
+            database_id=s.notion_database_id,
+            low_confidence_threshold=s.notion_low_confidence_threshold,
+        )
+        writeback = WriteBackService(notion_svc)
+        if action == "done":
+            result = writeback.mark_done(task_id)
+        elif action == "archive":
+            result = writeback.mark_archived(task_id)
+        elif action == "action":
+            result = writeback.mark_action_required(task_id)
+        elif action == "project":
+            result = writeback.set_project(task_id, arg or "")
+        else:
+            return "Unknown write-back action."
+        return f"[task {task_id[:8]}] {result.message}"
 
     def _do_sync_pending(self) -> str:
         from operation_drake.integrations.notion import get_notion_client

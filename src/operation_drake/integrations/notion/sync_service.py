@@ -138,6 +138,33 @@ class NotionSyncService:
             )
             return SyncResult(status="failed", error_category="unknown")
 
+    def update_properties(self, task_id: str, properties: dict) -> SyncResult:
+        """Patch specific properties on an already-synced page (Telegram
+        write-back commands). Does not touch classification or page body."""
+        record = self._repo.get_by_task_id(task_id)
+        if not record or not record.external_page_id:
+            return SyncResult(status="not_found")
+        self._repo.record_attempt(record.id)
+        try:
+            page_id, page_url = self._client.update_page(record.external_page_id, properties)
+            self._repo.mark_synced(record.id, page_id)
+            return SyncResult(status="updated", page_id=page_id, page_url=page_url)
+        except NotionAuthError:
+            self._repo.mark_failed(record.id, "auth")
+            return SyncResult(status="failed", error_category="auth")
+        except NotionRateLimitError:
+            self._repo.mark_failed(record.id, "rate_limit")
+            return SyncResult(status="failed", error_category="rate_limit")
+        except NotionTimeoutError:
+            self._repo.mark_failed(record.id, "timeout")
+            return SyncResult(status="failed", error_category="timeout")
+        except NotionAPIError:
+            self._repo.mark_failed(record.id, "api_error")
+            return SyncResult(status="failed", error_category="api_error")
+        except Exception:
+            self._repo.mark_failed(record.id, "unknown")
+            return SyncResult(status="failed", error_category="unknown")
+
     def sync_by_task_id(self, task_id: str) -> SyncResult:
         record = self._repo.get_by_task_id(task_id)
         if not record:

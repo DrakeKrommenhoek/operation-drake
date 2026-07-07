@@ -68,6 +68,7 @@ class InboundMessageCreate(BaseModel):
     forwarded_from: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
     processing_status: str = TaskStatus.received
+    content_hash: str = ""
 
 
 class InboundMessageRead(InboundMessageCreate):
@@ -163,6 +164,25 @@ class AgentRunRead(AgentRunCreate):
     completed_at: datetime | None = None
     status: str = "running"
     model_config = {"from_attributes": True}
+
+
+class SeenMessageCreate(BaseModel):
+    hash: str
+    task_id: str
+
+
+class TelegramReplyMapCreate(BaseModel):
+    telegram_message_id: str
+    task_id: str
+
+
+class PendingCaptureCreate(BaseModel):
+    sender_id: str
+    channel: str
+    raw_text: str = ""
+    message_type: str = MessageType.text
+    forwarded_from: str | None = None
+    external_message_id: str | None = None
 
 
 class NotionSyncCreate(BaseModel):

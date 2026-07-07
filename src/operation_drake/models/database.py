@@ -29,6 +29,7 @@ class InboundMessageORM(Base):
     forwarded_from: Mapped[str | None] = mapped_column(String, nullable=True)
     metadata_: Mapped[dict] = mapped_column("metadata", JSON, default=dict)
     processing_status: Mapped[str] = mapped_column(String, default="received")
+    content_hash: Mapped[str] = mapped_column(String, default="")
 
 
 class AttachmentORM(Base):
@@ -107,6 +108,38 @@ class NotionSyncORM(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, server_default=func.now(), onupdate=func.now()
     )
+
+
+class SeenMessageORM(Base):
+    """Dedupe record: hash of captured content -> the task that captured it."""
+
+    __tablename__ = "seen_messages"
+    hash: Mapped[str] = mapped_column(String, primary_key=True)
+    task_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class TelegramReplyMapORM(Base):
+    """Maps a bot-sent Telegram message id back to the task it reported on,
+    so a reply (/done, /archive, /action, /project) can resolve its target."""
+
+    __tablename__ = "telegram_reply_map"
+    telegram_message_id: Mapped[str] = mapped_column(String, primary_key=True)
+    task_id: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class PendingCaptureORM(Base):
+    """Holds a single low-confidence capture per sender awaiting a y/n reply."""
+
+    __tablename__ = "pending_captures"
+    sender_id: Mapped[str] = mapped_column(String, primary_key=True)
+    channel: Mapped[str] = mapped_column(String, nullable=False)
+    raw_text: Mapped[str] = mapped_column(Text, default="")
+    message_type: Mapped[str] = mapped_column(String, default="text")
+    forwarded_from: Mapped[str | None] = mapped_column(String, nullable=True)
+    external_message_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class AgentRunORM(Base):

@@ -8,7 +8,18 @@ from operation_drake.transcription import get_transcription_provider
 logger = get_logger(__name__)
 
 
+_PLAIN_STATUSES = {
+    "duplicate",
+    "answered",
+    "command_hint",
+    "awaiting_capture_confirmation",
+    "discarded",
+}
+
+
 def _format_response(result: ProcessResult) -> str:
+    if result.status in _PLAIN_STATUSES:
+        return result.result_summary
     lines = [
         f"Intent: {result.intent} (confidence: {result.confidence:.0%})",
         f"I think: {result.proposed_action}",

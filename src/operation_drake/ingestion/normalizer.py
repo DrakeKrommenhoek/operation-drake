@@ -1,8 +1,15 @@
+import hashlib
 from dataclasses import dataclass, field
 
 from operation_drake.ingestion.url_detector import detect_urls
 
 UNTRUSTED_MESSAGE_TYPES = {"forwarded", "document"}
+
+
+def compute_message_hash(normalized_text: str) -> str:
+    """SHA-256 of the normalized message content, lowercase and whitespace-collapsed."""
+    canonical = " ".join(normalized_text.lower().split())
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 @dataclass

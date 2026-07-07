@@ -17,3 +17,8 @@ class NotionClientInterface(ABC):
     @abstractmethod
     def get_database_properties(self) -> dict:
         """Return the database properties schema dict."""
+
+    @abstractmethod
+    def query_stale_by_content_type(self, content_type: str, older_than_iso: str) -> list[dict]:
+        """Return page dicts with the given Content Type captured before
+        older_than_iso (ISO date), excluding pages already Archived."""

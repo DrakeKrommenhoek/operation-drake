@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -11,7 +11,10 @@ from operation_drake.models.database import (
     InboundMessageORM,
     IntentDecisionORM,
     NotionSyncORM,
+    PendingCaptureORM,
+    SeenMessageORM,
     TaskORM,
+    TelegramReplyMapORM,
 )
 from operation_drake.models.schemas import (
     VALID_TRANSITIONS,
@@ -20,8 +23,11 @@ from operation_drake.models.schemas import (
     InboundMessageCreate,
     IntentDecisionCreate,
     NotionSyncCreate,
+    PendingCaptureCreate,
+    SeenMessageCreate,
     TaskCreate,
     TaskStatus,
+    TelegramReplyMapCreate,
 )
 
 
@@ -200,6 +206,83 @@ class AgentRunRepository:
 
         result = self.session.query(func.sum(AgentRunORM.token_count)).scalar()
         return result or 0
+
+
+class SeenMessageRepository:
+    """Dedupe store: content hash -> the task that first captured it."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def find_recent(self, hash_: str, within_days: int = 30) -> SeenMessageORM | None:
+        cutoff = _now() - timedelta(days=within_days)
+        return (
+            self.session.query(SeenMessageORM)
+            .filter(SeenMessageORM.hash == hash_, SeenMessageORM.created_at >= cutoff)
+            .first()
+        )
+
+    def record(self, hash_: str, task_id: str) -> SeenMessageORM:
+        existing = self.session.get(SeenMessageORM, hash_)
+        if existing:
+            existing.task_id = task_id
+            existing.created_at = _now()
+            self.session.commit()
+            return existing
+        obj = SeenMessageORM(**SeenMessageCreate(hash=hash_, task_id=task_id).model_dump())
+        self.session.add(obj)
+        self.session.commit()
+        self.session.refresh(obj)
+        return obj
+
+
+class TelegramReplyMapRepository:
+    """Maps a bot-sent Telegram message id to the task it reported on."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def record(self, telegram_message_id: str, task_id: str) -> TelegramReplyMapORM:
+        obj = TelegramReplyMapORM(
+            **TelegramReplyMapCreate(
+                telegram_message_id=telegram_message_id, task_id=task_id
+            ).model_dump()
+        )
+        self.session.add(obj)
+        self.session.commit()
+        self.session.refresh(obj)
+        return obj
+
+    def resolve(self, telegram_message_id: str) -> str | None:
+        obj = self.session.get(TelegramReplyMapORM, telegram_message_id)
+        return obj.task_id if obj else None
+
+
+class PendingCaptureRepository:
+    """Holds a single low-confidence capture per sender awaiting a y/n reply."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def get(self, sender_id: str) -> PendingCaptureORM | None:
+        return self.session.get(PendingCaptureORM, sender_id)
+
+    def set(self, data: PendingCaptureCreate) -> PendingCaptureORM:
+        existing = self.session.get(PendingCaptureORM, data.sender_id)
+        if existing:
+            self.session.delete(existing)
+            self.session.flush()
+        obj = PendingCaptureORM(**data.model_dump())
+        self.session.add(obj)
+        self.session.commit()
+        self.session.refresh(obj)
+        return obj
+
+    def clear(self, sender_id: str) -> None:
+        obj = self.session.get(PendingCaptureORM, sender_id)
+        if obj:
+            self.session.delete(obj)
+            self.session.commit()
 
 
 class NotionSyncRepository:

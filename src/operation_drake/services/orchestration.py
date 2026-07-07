@@ -7,15 +7,17 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from operation_drake.agents.capture import CaptureAgent
+from operation_drake.agents.meta_noise import MetaNoiseFilterAgent
 from operation_drake.agents.router import RouterAgent
 from operation_drake.agents.synthesis import SynthesisAgent
-from operation_drake.ingestion.normalizer import normalize_message
+from operation_drake.ingestion.normalizer import compute_message_hash, normalize_message
 from operation_drake.llm.base import LLMProvider
 from operation_drake.models.schemas import (
     AgentRunCreate,
     ArtifactCreate,
     InboundMessageCreate,
     IntentDecisionCreate,
+    PendingCaptureCreate,
     TaskCreate,
     TaskStatus,
 )
@@ -27,6 +29,9 @@ from operation_drake.storage.repositories import (
     ArtifactRepository,
     IntentRepository,
     MessageRepository,
+    NotionSyncRepository,
+    PendingCaptureRepository,
+    SeenMessageRepository,
     TaskRepository,
 )
 from operation_drake.transcription.base import TranscriptionProvider
@@ -35,6 +40,9 @@ from operation_drake.workflows.create_research_brief import CreateResearchBriefW
 from operation_drake.workflows.extract_actions import ExtractActionsWorkflow
 from operation_drake.workflows.process_voice_note import ProcessVoiceNoteWorkflow
 from operation_drake.workflows.summarize import SummarizeWorkflow
+
+DEDUPE_WINDOW_DAYS = 30
+LOW_CONFIDENCE_CAPTURE_THRESHOLD = 60
 
 logger = get_logger(__name__)
 
@@ -83,9 +91,12 @@ class OrchestratorService:
         self._artifact_repo = ArtifactRepository(session)
         self._intent_repo = IntentRepository(session)
         self._run_repo = AgentRunRepository(session)
+        self._seen_repo = SeenMessageRepository(session)
+        self._pending_repo = PendingCaptureRepository(session)
         self._router = RouterAgent(llm=llm)
         self._capture_agent = CaptureAgent(llm=llm)
         self._synthesis_agent = SynthesisAgent(llm=llm)
+        self._meta_noise_agent = MetaNoiseFilterAgent(llm=llm)
         self._transcriber = transcriber
         self._artifact_svc = ArtifactService(artifacts_dir=artifacts_dir)
         self._notion_svc = notion_sync_service
@@ -106,7 +117,220 @@ class OrchestratorService:
         attachment_path: str | None = None,
         external_message_id: str | None = None,
     ) -> ProcessResult:
+        """Entry point for a fresh inbound message. Resolves any pending y/n
+        capture confirmation first, then gates on dedupe and the meta-noise
+        filter before handing genuine captures to _execute_new_capture."""
+        if sender_id and message_type == "text":
+            pending = self._pending_repo.get(sender_id)
+            if pending:
+                reply = raw_text.strip().lower()
+                if reply in ("y", "yes"):
+                    self._pending_repo.clear(sender_id)
+                    return self._execute_new_capture(
+                        channel=pending.channel,
+                        raw_text=pending.raw_text,
+                        message_type=pending.message_type,
+                        sender_id=sender_id,
+                        forwarded_from=pending.forwarded_from,
+                        attachment_path=None,
+                        external_message_id=pending.external_message_id,
+                    )
+                if reply in ("n", "no"):
+                    self._pending_repo.clear(sender_id)
+                    return ProcessResult(
+                        message_id="",
+                        task_id="",
+                        intent="capture",
+                        confidence=0.0,
+                        proposed_action="",
+                        status="discarded",
+                        approval_required=False,
+                        clarification_question=None,
+                        artifact_path=None,
+                        result_summary="Discarded.",
+                    )
+                # Any other reply supersedes the stale pending capture below.
+
         normalized = normalize_message(raw_text, message_type, forwarded_from)
+        content_hash = compute_message_hash(normalized.normalized_text)
+
+        # Voice notes carry a placeholder normalized_text ("[Voice note]") until
+        # transcription runs inside the workflow — dedupe/meta-noise gates don't
+        # apply, they'd only ever compare placeholders against each other.
+        if normalized.message_type != "voice":
+            existing = self._seen_repo.find_recent(content_hash, within_days=DEDUPE_WINDOW_DAYS)
+            if existing:
+                msg = self._log_gated_message(
+                    channel,
+                    raw_text,
+                    normalized,
+                    forwarded_from,
+                    sender_id,
+                    external_message_id,
+                    content_hash,
+                    "duplicate",
+                )
+                link = self._notion_link_for_task(existing.task_id)
+                return ProcessResult(
+                    message_id=msg.id,
+                    task_id=existing.task_id,
+                    intent="duplicate",
+                    confidence=1.0,
+                    proposed_action="",
+                    status="duplicate",
+                    approval_required=False,
+                    clarification_question=None,
+                    artifact_path=None,
+                    result_summary=f"Already captured: {link}"
+                    if link
+                    else "Already captured earlier.",
+                )
+
+            meta = self._meta_noise_agent.classify(normalized.normalized_text)
+
+            if meta.category == "question":
+                msg = self._log_gated_message(
+                    channel,
+                    raw_text,
+                    normalized,
+                    forwarded_from,
+                    sender_id,
+                    external_message_id,
+                    content_hash,
+                    "answered",
+                )
+                answer = meta.answer or "I don't have enough information to answer that."
+                return ProcessResult(
+                    message_id=msg.id,
+                    task_id="",
+                    intent="question",
+                    confidence=meta.confidence / 100,
+                    proposed_action="",
+                    status="answered",
+                    approval_required=False,
+                    clarification_question=None,
+                    artifact_path=None,
+                    result_summary=answer,
+                )
+
+            if meta.category == "command":
+                msg = self._log_gated_message(
+                    channel,
+                    raw_text,
+                    normalized,
+                    forwarded_from,
+                    sender_id,
+                    external_message_id,
+                    content_hash,
+                    "command_detected",
+                )
+                return ProcessResult(
+                    message_id=msg.id,
+                    task_id="",
+                    intent="command",
+                    confidence=meta.confidence / 100,
+                    proposed_action="",
+                    status="command_hint",
+                    approval_required=False,
+                    clarification_question=None,
+                    artifact_path=None,
+                    result_summary=(
+                        "That looked like a command, not something to save. Reply to a "
+                        "capture confirmation with /done, /archive, /action, or "
+                        "/project <name>, or use /approve, /reject, /correct on a "
+                        "pending task."
+                    ),
+                )
+
+            if meta.confidence < LOW_CONFIDENCE_CAPTURE_THRESHOLD:
+                self._pending_repo.set(
+                    PendingCaptureCreate(
+                        sender_id=sender_id,
+                        channel=channel,
+                        raw_text=raw_text,
+                        message_type=message_type,
+                        forwarded_from=forwarded_from,
+                        external_message_id=external_message_id,
+                    )
+                )
+                msg = self._log_gated_message(
+                    channel,
+                    raw_text,
+                    normalized,
+                    forwarded_from,
+                    sender_id,
+                    external_message_id,
+                    content_hash,
+                    "awaiting_confirmation",
+                )
+                return ProcessResult(
+                    message_id=msg.id,
+                    task_id="",
+                    intent="capture",
+                    confidence=meta.confidence / 100,
+                    proposed_action="",
+                    status="awaiting_capture_confirmation",
+                    approval_required=False,
+                    clarification_question=None,
+                    artifact_path=None,
+                    result_summary="Save this? Reply y or n.",
+                )
+
+        return self._execute_new_capture(
+            channel=channel,
+            raw_text=raw_text,
+            message_type=message_type,
+            sender_id=sender_id,
+            forwarded_from=forwarded_from,
+            attachment_path=attachment_path,
+            external_message_id=external_message_id,
+        )
+
+    def _log_gated_message(
+        self,
+        channel: str,
+        raw_text: str,
+        normalized,
+        forwarded_from: str | None,
+        sender_id: str,
+        external_message_id: str | None,
+        content_hash: str,
+        processing_status: str,
+    ):
+        """Record an InboundMessage for a message that was gated (duplicate,
+        question, command, or awaiting confirmation) and never became a task."""
+        return self._msg_repo.create(
+            InboundMessageCreate(
+                channel=channel,
+                external_message_id=external_message_id or str(uuid.uuid4()),
+                sender_id=sender_id,
+                raw_text=raw_text,
+                normalized_text=normalized.normalized_text,
+                message_type=normalized.message_type,
+                forwarded_from=forwarded_from,
+                processing_status=processing_status,
+                content_hash=content_hash,
+            )
+        )
+
+    def _notion_link_for_task(self, task_id: str) -> str | None:
+        record = NotionSyncRepository(self._session).get_by_task_id(task_id)
+        if record and record.sync_status == "synced" and record.external_page_id:
+            return f"https://notion.so/{record.external_page_id.replace('-', '')}"
+        return None
+
+    def _execute_new_capture(
+        self,
+        channel: str,
+        raw_text: str = "",
+        message_type: str = "text",
+        sender_id: str = "",
+        forwarded_from: str | None = None,
+        attachment_path: str | None = None,
+        external_message_id: str | None = None,
+    ) -> ProcessResult:
+        normalized = normalize_message(raw_text, message_type, forwarded_from)
+        content_hash = compute_message_hash(normalized.normalized_text)
 
         msg = self._msg_repo.create(
             InboundMessageCreate(
@@ -118,6 +342,7 @@ class OrchestratorService:
                 message_type=normalized.message_type,
                 forwarded_from=forwarded_from,
                 processing_status=TaskStatus.normalizing.value,
+                content_hash=content_hash,
             )
         )
         self._msg_repo.update_status(msg.id, TaskStatus.interpreting.value)
@@ -200,6 +425,8 @@ class OrchestratorService:
             self._run_repo.add_tokens(run.id, wf_tokens)
 
         self._task_repo.transition(task.id, TaskStatus.completed)
+        if content_hash:
+            self._seen_repo.record(content_hash, task.id)
         artifact_id: str | None = None
         if artifact_path:
             artifact_orm = self._artifact_repo.create(
@@ -300,6 +527,8 @@ class OrchestratorService:
             self._run_repo.complete(
                 run.id, output_summary=result_summary, token_count=wf_tokens or None
             )
+            if msg and msg.content_hash:
+                self._seen_repo.record(msg.content_hash, task_id)
             artifact_id: str | None = None
             if artifact_path:
                 artifact_orm = self._artifact_repo.create(

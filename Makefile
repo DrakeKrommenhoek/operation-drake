@@ -1,4 +1,4 @@
-.PHONY: install test lint fmt check run cli telegram docker-build docker-up docker-down
+.PHONY: install test lint fmt check run cli telegram docker-build docker-up docker-down archive-stale-checkins
 
 install:
 	pip install -e ".[dev]"
@@ -34,3 +34,6 @@ docker-down:
 
 logs:
 	docker compose logs -f
+
+archive-stale-checkins:
+	python scripts/archive_stale_checkins.py

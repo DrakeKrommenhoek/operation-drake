@@ -17,10 +17,12 @@ class MockNotionClient(NotionClientInterface):
         should_fail: bool = False,
         fail_with: str = "unknown",
         existing_page_id: str | None = None,
+        stale_pages: list[dict] | None = None,
     ) -> None:
         self._should_fail = should_fail
         self._fail_with = fail_with
         self._existing_page_id = existing_page_id
+        self._stale_pages = stale_pages or []
         self.created_pages: list[dict] = []
         self.updated_pages: list[dict] = []
 
@@ -53,3 +55,7 @@ class MockNotionClient(NotionClientInterface):
 
     def get_database_properties(self) -> dict:
         return {}
+
+    def query_stale_by_content_type(self, content_type: str, older_than_iso: str) -> list[dict]:
+        self._maybe_fail()
+        return list(self._stale_pages)
