@@ -10,6 +10,7 @@ from operation_drake.models.database import (
     ArtifactORM,
     InboundMessageORM,
     IntentDecisionORM,
+    MetaNoiseLogORM,
     NotionSyncORM,
     PendingCaptureORM,
     SeenMessageORM,
@@ -22,6 +23,7 @@ from operation_drake.models.schemas import (
     ArtifactCreate,
     InboundMessageCreate,
     IntentDecisionCreate,
+    MetaNoiseLogCreate,
     NotionSyncCreate,
     PendingCaptureCreate,
     SeenMessageCreate,
@@ -243,6 +245,22 @@ class SeenMessageRepository:
             self.session.commit()
             return existing
         obj = SeenMessageORM(**SeenMessageCreate(hash=hash_, task_id=task_id).model_dump())
+        self.session.add(obj)
+        self.session.commit()
+        self.session.refresh(obj)
+        return obj
+
+
+class MetaNoiseLogRepository:
+    """Log of messages caught by the deterministic keyword pre-filter --
+    kept separate from inbound_messages so these never surface as vault
+    entries or Notion syncs."""
+
+    def __init__(self, session: Session):
+        self.session = session
+
+    def create(self, data: MetaNoiseLogCreate) -> MetaNoiseLogORM:
+        obj = MetaNoiseLogORM(id=_uid(), **data.model_dump())
         self.session.add(obj)
         self.session.commit()
         self.session.refresh(obj)

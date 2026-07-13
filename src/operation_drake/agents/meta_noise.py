@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,6 +13,37 @@ logger = get_logger(__name__)
 _PROMPT_PATH = Path("prompts/meta_noise_filter.md")
 
 VALID_CATEGORIES = {"capture", "question", "command"}
+
+# Deterministic pre-filter, run before any model call. Catches the obvious
+# cases -- confirmation-seeking about a prior capture, and bot-directed
+# instructions -- without spending a classifier call on them.
+_CONFIRMATION_PATTERNS = [
+    re.compile(r"\bdid (that|this|it) (save|sync|go through|work)\b", re.IGNORECASE),
+    re.compile(r"\bis (that|this|it) (in|on) notion\b", re.IGNORECASE),
+    re.compile(r"\bwas (that|this|it) saved\b", re.IGNORECASE),
+    re.compile(r"\bdid (that|this|it) (make|get) it (in|into|to) notion\b", re.IGNORECASE),
+    re.compile(r"\bdid you (save|get|catch) (that|this|it)\b", re.IGNORECASE),
+]
+
+_BOT_INSTRUCTION_PATTERNS = [
+    re.compile(r"\badd (my|this|that|these) .*to notion\b", re.IGNORECASE),
+    re.compile(r"\bput (this|that|these) in notion\b", re.IGNORECASE),
+    re.compile(r"\bsync (this|that|these) to notion\b", re.IGNORECASE),
+    re.compile(r"\bcan you (save|add|sync|put) .*(to|in) notion\b", re.IGNORECASE),
+]
+
+
+def keyword_prefilter(text: str) -> tuple[str, str] | None:
+    """Deterministic keyword/regex triage for obvious meta-noise. Returns
+    (category, matched_pattern) on a match; None if the message should
+    fall through to the model-based MetaNoiseFilterAgent instead."""
+    for pattern in _CONFIRMATION_PATTERNS:
+        if pattern.search(text):
+            return "confirmation_check", pattern.pattern
+    for pattern in _BOT_INSTRUCTION_PATTERNS:
+        if pattern.search(text):
+            return "bot_instruction", pattern.pattern
+    return None
 
 
 @dataclass

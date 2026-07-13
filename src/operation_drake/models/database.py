@@ -119,6 +119,21 @@ class SeenMessageORM(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class MetaNoiseLogORM(Base):
+    """Deterministic keyword-matched meta-noise (confirmation-seeking or
+    bot-directed instructions), logged separately from inbound_messages so
+    it never becomes a vault entry and never reaches the LLM classifier."""
+
+    __tablename__ = "meta_noise_log"
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=_uid)
+    channel: Mapped[str] = mapped_column(String, nullable=False)
+    sender_id: Mapped[str] = mapped_column(String, default="")
+    raw_text: Mapped[str] = mapped_column(Text, default="")
+    category: Mapped[str] = mapped_column(String, nullable=False)
+    matched_pattern: Mapped[str] = mapped_column(String, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
 class TelegramReplyMapORM(Base):
     """Maps a bot-sent Telegram message id back to the task it reported on,
     so a reply (/done, /archive, /action, /project) can resolve its target.
@@ -144,6 +159,7 @@ class PendingCaptureORM(Base):
     forwarded_from: Mapped[str | None] = mapped_column(String, nullable=True)
     external_message_id: Mapped[str | None] = mapped_column(String, nullable=True)
     inbound_message_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    entities: Mapped[list] = mapped_column(JSON, default=list)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

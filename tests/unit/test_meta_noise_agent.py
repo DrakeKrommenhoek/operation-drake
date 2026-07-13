@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from operation_drake.agents.meta_noise import MetaNoiseFilterAgent
+from operation_drake.agents.meta_noise import MetaNoiseFilterAgent, keyword_prefilter
 from operation_drake.llm.mock_provider import MockLLMProvider
 
 
@@ -42,3 +42,43 @@ def test_classify_handles_malformed_json_gracefully():
     result = MetaNoiseFilterAgent(llm=llm).classify("something")
     assert result.category == "capture"
     assert result.confidence == 100
+
+
+# ---------------------------------------------------------------------------
+# keyword_prefilter: deterministic regex triage, no model call involved
+# ---------------------------------------------------------------------------
+
+
+def test_prefilter_matches_confirmation_seeking():
+    result = keyword_prefilter("did that save?")
+    assert result is not None
+    category, _pattern = result
+    assert category == "confirmation_check"
+
+
+def test_prefilter_matches_is_that_in_notion():
+    result = keyword_prefilter("is that in notion yet?")
+    assert result is not None
+    assert result[0] == "confirmation_check"
+
+
+def test_prefilter_matches_bot_directed_instruction():
+    result = keyword_prefilter("add my ideas to notion")
+    assert result is not None
+    assert result[0] == "bot_instruction"
+
+
+def test_prefilter_matches_put_in_notion_instruction():
+    result = keyword_prefilter("put this in notion please")
+    assert result is not None
+    assert result[0] == "bot_instruction"
+
+
+def test_prefilter_returns_none_for_genuine_capture():
+    assert keyword_prefilter("Business idea: AI deployment service for PE firms") is None
+
+
+def test_prefilter_is_case_insensitive():
+    result = keyword_prefilter("DID THAT SAVE?")
+    assert result is not None
+    assert result[0] == "confirmation_check"

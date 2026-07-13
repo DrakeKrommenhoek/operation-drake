@@ -171,6 +171,14 @@ class SeenMessageCreate(BaseModel):
     task_id: str
 
 
+class MetaNoiseLogCreate(BaseModel):
+    channel: str
+    sender_id: str = ""
+    raw_text: str = ""
+    category: str
+    matched_pattern: str = ""
+
+
 class TelegramReplyMapCreate(BaseModel):
     sender_id: str
     telegram_message_id: str
@@ -185,6 +193,7 @@ class PendingCaptureCreate(BaseModel):
     forwarded_from: str | None = None
     external_message_id: str | None = None
     inbound_message_id: str | None = None
+    entities: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class NotionSyncCreate(BaseModel):

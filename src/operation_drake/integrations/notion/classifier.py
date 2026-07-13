@@ -97,14 +97,19 @@ class NotionClassifier(BaseAgent):
         if data.get("notion_status") == "Needs Review":
             notion_status = "Needs Review"
 
+        # Actionable is derived deterministically from next_action rather than
+        # trusting the model's own boolean -- the model would otherwise set
+        # actionable=true with an empty next_action, or vice versa.
+        next_action = str(data.get("next_action", ""))
+
         return NotionClassification(
             project=project,
             content_type=content_type,
             title=str(data.get("title", content[:80]))[:200],
             summary=str(data.get("summary", "")),
             tags=[str(t) for t in data.get("tags", []) if isinstance(t, str)][:10],
-            actionable=bool(data.get("actionable", False)),
-            next_action=str(data.get("next_action", "")),
+            actionable=bool(next_action.strip()),
+            next_action=next_action,
             capture_context=capture_context,
             confidence=confidence,
             sync_to_notion=bool(data.get("sync_to_notion", True)),

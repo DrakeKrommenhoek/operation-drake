@@ -103,6 +103,7 @@ _PLAIN_STATUSES = {
     "command_hint",
     "awaiting_capture_confirmation",
     "discarded",
+    "meta_noise_logged",
 }
 
 
@@ -451,6 +452,10 @@ class TelegramAdapter(ChannelAdapter):
         if update.message.forward_origin:
             forwarded_from = str(type(update.message.forward_origin).__name__)
             msg_type = "forwarded"
+        entities = [
+            {"type": e.type, "offset": e.offset, "length": e.length, "url": e.url}
+            for e in (update.message.entities or [])
+        ]
         await update.message.reply_text("Processing...")
         loop = asyncio.get_event_loop()
         response, task_id = await loop.run_in_executor(
@@ -461,6 +466,7 @@ class TelegramAdapter(ChannelAdapter):
             uid,
             forwarded_from,
             str(update.message.message_id),
+            entities,
         )
         sent = await _reply(update, response)
         if task_id:
@@ -495,7 +501,13 @@ class TelegramAdapter(ChannelAdapter):
     # -----------------------------------------------------------------------
 
     def _process_sync(
-        self, text: str, msg_type: str, sender_id: str, forwarded_from: str | None, ext_id: str
+        self,
+        text: str,
+        msg_type: str,
+        sender_id: str,
+        forwarded_from: str | None,
+        ext_id: str,
+        entities: list[dict] | None = None,
     ) -> tuple[str, str | None]:
         result = _make_orchestrator(self._settings.artifacts_dir).process(
             channel="telegram",
@@ -504,6 +516,7 @@ class TelegramAdapter(ChannelAdapter):
             sender_id=sender_id,
             forwarded_from=forwarded_from,
             external_message_id=ext_id,
+            entities=entities,
         )
         # Map whenever a real task exists, not just on immediate completion —
         # awaiting_approval and duplicate replies are still valid reply
