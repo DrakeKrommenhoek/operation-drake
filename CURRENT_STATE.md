@@ -1,8 +1,15 @@
 # CURRENT_STATE.md
 
-Last updated: 2026-07-04 (Session 6 — Notion integration live and verified in production)
+Last updated: 2026-07-13 (Session 9 — intake bot fixes merged to master; VPS not yet redeployed)
 
-## Verified Facts
+## Verified Facts — Session 9 (2026-07-13, checked from a sandboxed cloud session, no VPS access)
+
+- PR #1 (`claude/telegram-intake-bot-fixes-2c7rct`) merged to `master` at `1c748a7`: source URL detection (`ingestion/url_detector.py`), Source/Source URL decoupling, deterministic `actionable` flag, meta-noise keyword pre-filter (with reviewed/hardened regex — see PR body for the five false-positive fixes)
+- `master` HEAD verified locally (fresh `python3.12 -m venv` + `pip install -e ".[dev]"`): **280 tests pass**, `ruff check src/ tests/` clean
+- Schema change not yet applied anywhere outside test SQLite: `pending_captures.entities` (new column) and `meta_noise_log` (new table) are created via `Base.metadata.create_all()` — no migration tooling in this repo
+- **VPS status below (Session 6, commit `4bb49b3`) is stale** — the box has not been redeployed since. This session had no SSH/network path to the VPS to verify or update it. Deploy steps (backup `drake.db`, foreground dry-run, `docker compose up -d`/systemd, live Telegram smoke test) are tracked as pending in `TASKS.md` under "Session 10" and need to be run from a session/terminal with VPS access.
+
+## Verified Facts (as of Session 6, 2026-07-04 — see note above)
 
 ### Local Environment
 - Python 3.12.10
@@ -15,11 +22,11 @@ Last updated: 2026-07-04 (Session 6 — Notion integration live and verified in 
 - Location (local): `C:\Users\drake\Desktop\operation-drake\`
 - GitHub: `https://github.com/DrakeKrommenhoek/operation-drake.git`
 - Branch: `master`
-- Latest commit: `4bb49b3 fix: use raw httpx with Notion-Version 2022-06-28 in live_client`
+- Latest commit: `4bb49b3 fix: use raw httpx with Notion-Version 2022-06-28 in live_client` (superseded — see Session 9 note above; `master` is now at `1c748a7`)
 - Git working tree: clean
 - Local and remote are in sync
 
-### Local Application Status
+### Local Application Status (Session 6 snapshot)
 - **193 tests pass**, zero failures, zero warnings (98 new Notion-specific tests)
 - `ruff check`: all checks passed
 - `ruff format --check`: all files formatted

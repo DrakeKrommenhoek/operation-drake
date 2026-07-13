@@ -136,3 +136,19 @@
 - [ ] Build social-media / URL capture workflow (see docs/superpowers/specs/2026-07-04-social-media-capture-design.md)
 - [ ] Model selection: choose between gpt-4o-mini and gpt-4o per intent
 - [ ] Start the 14-day soak on v1.1 before moving to v1.2 Sunday Review (per `ROADMAP.md`'s one-phase-at-a-time gate)
+
+## Completed — Session 9 (2026-07-13): intake bot fixes merged
+
+- [x] PR #1 (`claude/telegram-intake-bot-fixes-2c7rct` → `master`) merged: source URL detection, Source/Source URL decoupling, deterministic `actionable` flag, meta-noise keyword pre-filter with the reviewed/hardened regex patterns
+- [x] Verified locally at `master` HEAD (`1c748a7`): 280 tests pass, `ruff check` clean
+
+## Pending — Session 10 (deploy the intake bot fixes)
+
+Blocked on VPS access — this session has no SSH/network path to the DigitalOcean box, so these must be run from a session or terminal that does:
+
+- [ ] Back up `drake.db` on the VPS before deploying (schema changes: new `entities` column on `pending_captures`, new `meta_noise_log` table)
+- [ ] Pull `master` on the VPS, run a foreground dry-run (`python scripts/dry_run.py` or equivalent inside the container) to confirm `Base.metadata.create_all()` applies the new column/table cleanly — this repo has no migration tooling, so this is the only schema-safety check
+- [ ] Only after the dry-run is clean, hand off to systemd / `docker compose up -d` per `scripts/deploy.sh`
+- [ ] Send one live Telegram message with a bare URL and one without; confirm both land in Notion with `Source URL` populated/blank as expected
+- [ ] Start the weekly `meta_noise_log` manual spot-check (first month post-deploy) — this is the actual safety net for the known accepted limitation where a bot-instruction phrase appearing in the first ~90 chars of a longer, substantive message can cause the whole message to be logged as noise instead of captured. Not a regex fix — if it shows up in practice, the fix is likely an LLM-based check for borderline-length messages (future task)
+- [ ] Flag to Drake: existing blank-`Source URL` entries already in the Notion vault (from before this fix) are untouched — the fix is forward-only. A backfill script (re-parse stored raw text, patch `Source URL`) was proposed as "Task 1b" but not built or scheduled
