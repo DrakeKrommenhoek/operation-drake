@@ -17,20 +17,41 @@ VALID_CATEGORIES = {"capture", "question", "command"}
 # Deterministic pre-filter, run before any model call. Catches the obvious
 # cases -- confirmation-seeking about a prior capture, and bot-directed
 # instructions -- without spending a classifier call on them.
+#
+# The (?!['’]s) guards keep "Notion's roadmap" / "notion's" (possessive,
+# genuine content) from satisfying "in notion" / "to notion". The (?!\s+by\b)
+# guard on the "saved" pattern excludes passive-voice idioms like "saved by
+# the bell", which otherwise collide with the literal substring "that saved".
 _CONFIRMATION_PATTERNS = [
     re.compile(r"\bdid (that|this|it) (save|sync|go through|work)\b", re.IGNORECASE),
-    re.compile(r"\bis (that|this|it) (in|on) notion\b", re.IGNORECASE),
-    re.compile(r"\bwas (that|this|it) saved\b", re.IGNORECASE),
+    re.compile(r"\bis (that|this|it) (in|on) notion\b(?!['’]s)", re.IGNORECASE),
+    re.compile(r"\bwas (that|this|it) saved\b(?!\s+by\b)", re.IGNORECASE),
     re.compile(r"\bdid (that|this|it) (make|get) it (in|into|to) notion\b", re.IGNORECASE),
     re.compile(r"\bdid you (save|get|catch) (that|this|it)\b", re.IGNORECASE),
 ]
 
+# The wildcard between the verb and "to"/"in notion" is bounded ([^.!?]{0,90})
+# so it can span a list of objects ("add my X and my Y ... to notion") but
+# can't cross a sentence boundary. \b directly before "to"/"in" (rather than
+# relying on the literal words alone) stops "into notion" from satisfying "to
+# notion" -- "into" has no word boundary before its trailing "to". The
+# (?!['’]s) guard excludes the possessive "notion's" the same way as above.
 _BOT_INSTRUCTION_PATTERNS = [
-    re.compile(r"\badd (my|this|that|these) .*to notion\b", re.IGNORECASE),
+    re.compile(r"\badd (my|this|that|these) [^.!?]{0,90}?\bto notion\b(?!['’]s)", re.IGNORECASE),
     re.compile(r"\bput (this|that|these) in notion\b", re.IGNORECASE),
     re.compile(r"\bsync (this|that|these) to notion\b", re.IGNORECASE),
-    re.compile(r"\bcan you (save|add|sync|put) .*(to|in) notion\b", re.IGNORECASE),
+    re.compile(
+        r"\bcan you (save|add|sync|put) [^.!?]{0,90}?\b(to|in) notion\b(?!['’]s)", re.IGNORECASE
+    ),
 ]
+
+# Bot-instruction patterns are only searched within this leading window --
+# genuine commands are stated up front ("add X to notion"), so this stops a
+# real instruction phrase from matching when it's tacked onto the end of an
+# unrelated, substantive message (e.g. an idea, then "-- can you save that to
+# Notion" as an afterthought). Confirmation patterns aren't windowed since
+# those messages are typically short standalone questions.
+_BOT_INSTRUCTION_WINDOW = 100
 
 
 def keyword_prefilter(text: str) -> tuple[str, str] | None:
@@ -40,8 +61,9 @@ def keyword_prefilter(text: str) -> tuple[str, str] | None:
     for pattern in _CONFIRMATION_PATTERNS:
         if pattern.search(text):
             return "confirmation_check", pattern.pattern
+    window = text[:_BOT_INSTRUCTION_WINDOW]
     for pattern in _BOT_INSTRUCTION_PATTERNS:
-        if pattern.search(text):
+        if pattern.search(window):
             return "bot_instruction", pattern.pattern
     return None
 
