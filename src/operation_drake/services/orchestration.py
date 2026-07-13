@@ -7,16 +7,18 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from operation_drake.agents.capture import CaptureAgent
-from operation_drake.agents.meta_noise import MetaNoiseFilterAgent
+from operation_drake.agents.meta_noise import MetaNoiseFilterAgent, keyword_prefilter
 from operation_drake.agents.router import RouterAgent
 from operation_drake.agents.synthesis import SynthesisAgent
 from operation_drake.ingestion.normalizer import compute_message_hash, normalize_message
+from operation_drake.ingestion.url_detector import extract_source_url
 from operation_drake.llm.base import LLMProvider
 from operation_drake.models.schemas import (
     AgentRunCreate,
     ArtifactCreate,
     InboundMessageCreate,
     IntentDecisionCreate,
+    MetaNoiseLogCreate,
     PendingCaptureCreate,
     TaskCreate,
     TaskStatus,
@@ -29,6 +31,7 @@ from operation_drake.storage.repositories import (
     ArtifactRepository,
     IntentRepository,
     MessageRepository,
+    MetaNoiseLogRepository,
     NotionSyncRepository,
     PendingCaptureRepository,
     SeenMessageRepository,
@@ -93,6 +96,7 @@ class OrchestratorService:
         self._run_repo = AgentRunRepository(session)
         self._seen_repo = SeenMessageRepository(session)
         self._pending_repo = PendingCaptureRepository(session)
+        self._noise_log_repo = MetaNoiseLogRepository(session)
         self._router = RouterAgent(llm=llm)
         self._capture_agent = CaptureAgent(llm=llm)
         self._synthesis_agent = SynthesisAgent(llm=llm)
@@ -116,10 +120,12 @@ class OrchestratorService:
         forwarded_from: str | None = None,
         attachment_path: str | None = None,
         external_message_id: str | None = None,
+        entities: list[dict] | None = None,
     ) -> ProcessResult:
         """Entry point for a fresh inbound message. Resolves any pending y/n
-        capture confirmation first, then gates on dedupe and the meta-noise
-        filter before handing genuine captures to _execute_new_capture."""
+        capture confirmation first, then gates on the deterministic meta-noise
+        keyword pre-filter, dedupe, and the model-based meta-noise filter
+        before handing genuine captures to _execute_new_capture."""
         if sender_id and message_type == "text":
             pending = self._pending_repo.get(sender_id)
             if pending:
@@ -135,6 +141,7 @@ class OrchestratorService:
                         attachment_path=None,
                         external_message_id=pending.external_message_id,
                         existing_message_id=pending.inbound_message_id,
+                        entities=pending.entities,
                     )
                 if reply in ("n", "no"):
                     self._pending_repo.clear(sender_id)
@@ -151,6 +158,32 @@ class OrchestratorService:
                         result_summary="Discarded.",
                     )
                 # Any other reply supersedes the stale pending capture below.
+
+        if message_type == "text":
+            prefiltered = keyword_prefilter(raw_text)
+            if prefiltered:
+                category, matched_pattern = prefiltered
+                self._noise_log_repo.create(
+                    MetaNoiseLogCreate(
+                        channel=channel,
+                        sender_id=sender_id,
+                        raw_text=raw_text,
+                        category=category,
+                        matched_pattern=matched_pattern,
+                    )
+                )
+                return ProcessResult(
+                    message_id="",
+                    task_id="",
+                    intent="meta_noise",
+                    confidence=1.0,
+                    proposed_action="",
+                    status="meta_noise_logged",
+                    approval_required=False,
+                    clarification_question=None,
+                    artifact_path=None,
+                    result_summary="Logged -- not saved to the vault.",
+                )
 
         normalized = normalize_message(raw_text, message_type, forwarded_from)
         content_hash = compute_message_hash(normalized.normalized_text)
@@ -263,6 +296,7 @@ class OrchestratorService:
                         forwarded_from=forwarded_from,
                         external_message_id=external_message_id,
                         inbound_message_id=msg.id,
+                        entities=entities or [],
                     )
                 )
                 return ProcessResult(
@@ -287,6 +321,7 @@ class OrchestratorService:
             attachment_path=attachment_path,
             external_message_id=external_message_id,
             normalized=normalized,
+            entities=entities,
         )
 
     def _log_gated_message(
@@ -333,6 +368,7 @@ class OrchestratorService:
         external_message_id: str | None = None,
         normalized=None,
         existing_message_id: str | None = None,
+        entities: list[dict] | None = None,
     ) -> ProcessResult:
         if normalized is None:
             normalized = normalize_message(raw_text, message_type, forwarded_from)
@@ -356,9 +392,11 @@ class OrchestratorService:
                     forwarded_from=forwarded_from,
                     processing_status=TaskStatus.normalizing.value,
                     content_hash=content_hash,
+                    metadata={"entities": entities} if entities else {},
                 )
             )
         self._msg_repo.update_status(msg.id, TaskStatus.interpreting.value)
+        source_url = extract_source_url(raw_text, entities)
 
         run = self._run_repo.create(
             AgentRunCreate(
@@ -465,6 +503,7 @@ class OrchestratorService:
             project=project,
             channel=channel,
             message_type=normalized.message_type,
+            source_url=source_url,
         )
 
         return ProcessResult(
@@ -517,6 +556,10 @@ class OrchestratorService:
 
         msg = self._msg_repo.get(task.inbound_message_id)
         content = msg.normalized_text if msg else task.requested_action
+        source_url = extract_source_url(
+            msg.raw_text if msg else content,
+            ((msg.metadata_ or {}).get("entities") if msg else None),
+        )
 
         self._task_repo.approve(task_id)
         self._task_repo.transition(task_id, TaskStatus.running)
@@ -566,6 +609,7 @@ class OrchestratorService:
                 project=task.project,
                 channel="telegram",
                 message_type="text",
+                source_url=source_url,
             )
             return ProcessResult(
                 message_id=task.inbound_message_id,
@@ -740,6 +784,7 @@ class OrchestratorService:
         project: str | None,
         channel: str,
         message_type: str,
+        source_url: str | None = None,
     ) -> tuple[str | None, str | None, str | None, str | None, bool]:
         """Attempt Notion sync. Returns (sync_status, page_url, project, content_type, needs_review).
         Never raises — Notion failure must not affect task status."""
@@ -756,6 +801,10 @@ class OrchestratorService:
             )
             classification.task_id = task_id
             classification.artifact_id = artifact_id
+            # Source URL is independent of content type or classification
+            # outcome -- whatever was detected in the message is written
+            # regardless of what the model decided about the content.
+            classification.source_url = source_url
             sync_result = self._notion_svc.sync(
                 task_id=task_id,
                 artifact_id=artifact_id,

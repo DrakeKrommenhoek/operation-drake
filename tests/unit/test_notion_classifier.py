@@ -126,6 +126,31 @@ def test_classify_the_answer_movement():
     assert result.content_type == "Idea"
 
 
+# ---------------------------------------------------------------------------
+# Actionable is derived deterministically from next_action, never trusted
+# from the model's own boolean.
+# ---------------------------------------------------------------------------
+
+
+def test_classify_actionable_true_when_model_says_false_but_next_action_present():
+    clf = _clf(_valid_json(actionable=False, next_action="Follow up with the accountant"))
+    result = clf.classify("something")
+    assert result.actionable is True
+    assert result.next_action == "Follow up with the accountant"
+
+
+def test_classify_actionable_false_when_model_says_true_but_next_action_empty():
+    clf = _clf(_valid_json(actionable=True, next_action=""))
+    result = clf.classify("something")
+    assert result.actionable is False
+
+
+def test_classify_actionable_false_when_next_action_is_only_whitespace():
+    clf = _clf(_valid_json(actionable=True, next_action="   "))
+    result = clf.classify("something")
+    assert result.actionable is False
+
+
 def test_classify_prework_drive_context():
     clf = _clf(
         _valid_json(
