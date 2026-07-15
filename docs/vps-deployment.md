@@ -119,3 +119,13 @@ For production, consider putting Nginx in front as a reverse proxy with TLS. Thi
 - [ ] Bot token is not shared or logged
 - [ ] No API keys in docker-compose.yml (use `env_file`)
 - [ ] Data directory is not publicly accessible
+
+## health/ Cron (Personal Health OS)
+
+`health/` is a self-contained module (see `health/README.md`) that shares only the
+SQLite file with the bot -- it runs as a plain cron job, not a container. Do not
+schedule it until `python -m health.verify` passes on the VPS.
+
+```cron
+0 6 * * * cd /opt/operation-drake && /opt/operation-drake/.venv/bin/python -m health.ingest >> /opt/operation-drake/health/logs/ingest.log 2>&1
+```
